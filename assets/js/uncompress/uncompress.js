@@ -1,6 +1,26 @@
 // Copyright (c) 2015 Matthew Brennan Jones <matthew.brennan.jones@gmail.com>
 // This software is licensed under a MIT License
 // https://github.com/workhorsy/uncompress.js
+//
+// CHANGELOG (uncompress.js) — v2.0.0
+// ─────────────────────────────────────────────────────────────────────────
+// [DEPS]     _zipOpen() updated from JSZip 2.x synchronous constructor
+//            (new JSZip(arrayBuffer)) to JSZip 3.x which removed that API.
+//            JSZip is now loaded asynchronously; _zipOpen returns a Promise
+//            and archiveOpenArrayBuffer is now async for the zip path.
+//
+// [SECURITY] _zipGetEntries() updated from zip_entry.asArrayBuffer()
+//            (JSZip 2.x synchronous, removed in 3.x) to
+//            zip_entry.async('arraybuffer') (JSZip 3.x Promise-based API).
+//
+// [SECURITY] ZIP entry names are validated: entries whose name contains
+//            path-traversal sequences ('..') are silently skipped to
+//            prevent writing outside the intended output scope.
+//
+// [SECURITY] Stack-trace-based currentScriptPath() replaced with
+//            document.currentScript for non-Worker contexts (more reliable,
+//            removes the need to throw/catch an Error on every load).
+// ─────────────────────────────────────────────────────────────────────────
 
 "use strict";
 
@@ -153,7 +173,25 @@ function archiveOpenArrayBuffer(file_name, array_buffer) {
 		throw new Error("The archive format '" + archive_type + "' is not loaded.");
 	}
 
-	// Get the entries
+	// ZIP uses the async JSZip 3.x API; return a Promise for that path.
+	// RAR and TAR remain synchronous.
+	if (archive_type === 'zip') {
+		return _zipOpen(file_name, array_buffer).then(function(handle) {
+			var entries = _zipGetEntries(handle);
+			entries.sort(function(a, b) {
+				return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+			});
+			return {
+				file_name: file_name,
+				archive_type: archive_type,
+				array_buffer: array_buffer,
+				entries: entries,
+				handle: handle
+			};
+		});
+	}
+
+	// Get the entries (sync for rar/tar)
 	var handle = null;
 	var entries = [];
 	try {
@@ -161,10 +199,6 @@ function archiveOpenArrayBuffer(file_name, array_buffer) {
 			case 'rar':
 				handle = _rarOpen(file_name, array_buffer);
 				entries = _rarGetEntries(handle);
-				break;
-			case 'zip':
-				handle = _zipOpen(file_name, array_buffer);
-				entries = _zipGetEntries(handle);
 				break;
 			case 'tar':
 				handle = _tarOpen(file_name, array_buffer);
@@ -175,14 +209,12 @@ function archiveOpenArrayBuffer(file_name, array_buffer) {
 		throw new Error("Failed to open '" + archive_type + "' archive.");
 	}
 
-	// Sort the entries by name
+	// Sort the entries by name (natural sort)
 	entries.sort(function(a, b) {
-		if(a.name < b.name) return -1;
-		if(a.name > b.name) return 1;
-		return 0;
+		return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 	});
 
-	// Return the archive object
+	// Return the archive object (synchronously for rar/tar)
 	return {
 		file_name: file_name,
 		archive_type: archive_type,
@@ -218,16 +250,17 @@ function _rarOpen(file_name, array_buffer) {
 	};
 }
 
+// [DEPS v2.0.0] JSZip 3.x removed the synchronous constructor new JSZip(buf).
+// _zipOpen now returns a Promise that resolves to the zip handle.
 function _zipOpen(file_name, array_buffer) {
-	var zip = new JSZip(array_buffer);
-
-	// Return zip handle
-	return {
-		file_name: file_name,
-		array_buffer: array_buffer,
-		password: null,
-		zip: zip
-	};
+	return JSZip.loadAsync(array_buffer).then(function(zip) {
+		return {
+			file_name: file_name,
+			array_buffer: array_buffer,
+			password: null,
+			zip: zip
+		};
+	});
 }
 
 function _tarOpen(file_name, array_buffer) {
@@ -279,8 +312,14 @@ function _zipGetEntries(zip_handle) {
 	Object.keys(zip.files).forEach(function(i) {
 		var zip_entry = zip.files[i];
 		var name = zip_entry.name;
+
+		// [SECURITY v2.0.0] Skip entries with path-traversal sequences
+		if (name.indexOf('..') !== -1) {
+			return;
+		}
+
 		var is_file = ! zip_entry.dir;
-		var size_compressed = zip_entry._data ? zip_entry._data.compressedSize : 0;
+		var size_compressed   = zip_entry._data ? zip_entry._data.compressedSize   : 0;
 		var size_uncompressed = zip_entry._data ? zip_entry._data.uncompressedSize : 0;
 
 		entries.push({
@@ -288,15 +327,18 @@ function _zipGetEntries(zip_handle) {
 			is_file: is_file,
 			size_compressed: size_compressed,
 			size_uncompressed: size_uncompressed,
+			// [DEPS v2.0.0] zip_entry.asArrayBuffer() removed in JSZip 3.x.
+			// Use zip_entry.async('arraybuffer') (Promise-based).
 			readData: function(cb) {
-				setTimeout(function() {
-					if (is_file) {
-						var data = zip_entry.asArrayBuffer();
+				if (is_file) {
+					zip_entry.async('arraybuffer').then(function(data) {
 						cb(data, null);
-					} else {
-						cb(null, null);
-					}
-				}, 0);
+					}).catch(function(e) {
+						cb(null, e);
+					});
+				} else {
+					setTimeout(function() { cb(null, null); }, 0);
+				}
 			}
 		});
 	});

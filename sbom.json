@@ -1,0 +1,99 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:web-comic-reader-v2.0.0",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-01-01T00:00:00Z",
+    "component": {
+      "type": "application",
+      "name": "web-comic-reader",
+      "version": "2.0.0",
+      "description": "Client-side CBR/CBZ/CBT comic reader",
+      "licenses": [{ "license": { "id": "MIT" } }],
+      "externalReferences": [
+        { "type": "website", "url": "https://github.com/afzafri/Web-Comic-Reader" }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "lightgallery",
+      "version": "2.7.2",
+      "description": "Image and video gallery library",
+      "licenses": [{ "license": { "id": "GPL-3.0-only" } }],
+      "purl": "pkg:npm/lightgallery@2.7.2",
+      "externalReferences": [
+        { "type": "website", "url": "https://www.lightgalleryjs.com/" },
+        { "type": "distribution", "url": "https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/" }
+      ],
+      "properties": [
+        { "name": "cdnProvider", "value": "jsdelivr" },
+        { "name": "upgradeReason", "value": "Replaces unmaintained 1.4.0 which had no security patches since 2019 and several XSS vectors in older plugin APIs." }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "jszip",
+      "version": "3.10.1",
+      "description": "Create, read and edit .zip files with JavaScript",
+      "licenses": [{ "license": { "id": "MIT" } }],
+      "purl": "pkg:npm/jszip@3.10.1",
+      "externalReferences": [
+        { "type": "website", "url": "https://stuk.github.io/jszip/" },
+        { "type": "distribution", "url": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/" }
+      ],
+      "properties": [
+        { "name": "cdnProvider", "value": "jsdelivr" },
+        { "name": "upgradeReason", "value": "Bundled 2.x lacked path-traversal protections. 3.x validates entry names and uses Promises throughout." }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dropzone",
+      "version": "6.0.0",
+      "description": "Drag-and-drop file upload library",
+      "licenses": [{ "license": { "id": "MIT" } }],
+      "purl": "pkg:npm/dropzone@6.0.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://www.dropzone.dev/" },
+        { "type": "distribution", "url": "https://cdn.jsdelivr.net/npm/dropzone@6.0.0/" }
+      ],
+      "properties": [
+        { "name": "cdnProvider", "value": "jsdelivr" },
+        { "name": "upgradeReason", "value": "Pinned to exact version. Previous import used floating unpkg.com/dropzone with no version pin — any future release could silently break or introduce regressions." }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "uncompress.js",
+      "version": "bundled",
+      "description": "JavaScript archive decompression (RAR, ZIP, TAR)",
+      "licenses": [{ "license": { "id": "MIT" } }],
+      "externalReferences": [
+        { "type": "website", "url": "https://github.com/workhorsy/uncompress.js" }
+      ],
+      "properties": [
+        { "name": "vendored", "value": "true" },
+        { "name": "note", "value": "Vendored copy; upstream appears abandoned. Consider replacing libunrar.js (Emscripten WASM) with a maintained WASM port for RAR5 support." }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "libunrar.js",
+      "version": "bundled (Emscripten build ~2015)",
+      "description": "Emscripten-compiled unrar for the browser",
+      "externalReferences": [
+        { "type": "website", "url": "https://github.com/workhorsy/uncompress.js" }
+      ],
+      "properties": [
+        { "name": "vendored", "value": "true" },
+        { "name": "riskLevel", "value": "medium" },
+        { "name": "note", "value": "Old Emscripten build; no CVE history found but no updates either. RAR5 archives are not supported. Recommend evaluating libarchive.wasm or @genxium/wasm-unrar as modern replacements." }
+      ]
+    }
+  ],
+  "vulnerabilities": []
+}

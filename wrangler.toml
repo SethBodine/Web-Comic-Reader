@@ -1,0 +1,10 @@
+name = "web-comic-reader"
+compatibility_date = "2024-01-01"
+
+[build]
+command = ""
+publish = "."
+
+[site]
+bucket = "."
+include = ["index.html", "assets/**", "_headers", "_redirects"]

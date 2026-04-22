@@ -1,146 +1,124 @@
-# Web Comic Reader
+# Web Comic Reader v2.0.0
 
-Modern web-based comic book reader for CBR, CBZ, and CBT files with library management and reading progress tracking.
+Modern web-based comic book reader for CBR, CBZ, and CBT files — runs entirely in your browser, no server required.
+
+## What's New in v2.0.0
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full per-file commit log.
+
+- **Large file support** — CBR/CBZ/CBT files up to **1 GB** now load reliably via chunked streaming with a visible byte-level progress bar
+- **Drag & drop improved** — enhanced visual feedback on dragover; clear "drag here or click to browse" copy; large-file warning banner
+- **Security hardened** — XSS fixes, localStorage sanitisation, all CDN dependencies pinned with version locks; Content Security Policy added
+- **Dependencies updated** — lightgallery 1.4 → 2.7.2, jszip 2 → 3.10.1, dropzone pinned to 6.0.0
+- **Cloudflare Pages ready** — `_headers`, `_redirects`, and `wrangler.toml` included; strict security headers served at the edge
+- **Natural page sort** — pages now sort as 1, 2, … 10 instead of 1, 10, 2
+- **AVIF/TIFF** image formats now recognised
+- **SBOM** (Software Bill of Materials) in CycloneDX JSON format at `sbom.json`
+
+---
 
 ## Features
 
-- **Modern UI** 
-- **Library Mode** - Select your comics folder once, access anytime with persistent folder access
-- **Reading Progress** - Automatically saves your last read page and scrolls to it when you reopen
-- **Thumbnail Previews** - Auto-generated cover thumbnails for quick comic recognition
-- **Recently Read** - Quick access to your last 5 comics with progress indicators
-- **Quick Read Mode** - Upload and read individual files without library setup
-- **Client-Side Only** - All processing happens in your browser, no server uploads required
-- **Offline Support** - Works completely offline after initial load
+- **Library Mode** — select your comics folder once; browser remembers access
+- **Reading Progress** — last-read page saved and highlighted on reopen
+- **Thumbnail Previews** — auto-generated cover thumbnails
+- **Recently Read** — quick access to your 5 most recent comics
+- **Quick Read Mode** — drag-drop or click-to-open, no setup needed
+- **Client-Side Only** — all decompression happens in your browser; nothing is uploaded
+- **Offline Capable** — works without network after first load
+- **Dark Mode** — automatic via `prefers-color-scheme`
 
-## Usage
-
-### Library Mode (Recommended)
-1. Click "Select Comics Folder"
-2. Choose your comics folder and grant permission
-3. Browse your library with thumbnails and progress tracking
-4. Click any comic to read
-5. Your progress is automatically saved
-
-### Quick Read Mode
-1. Click "Quick Read"
-2. Upload a single CBR/CBZ/CBT file
-3. Read immediately (progress won't be saved)
-
-## Getting Started (Development)
-
-### Prerequisites
-- A local web server (Python's `http.server`, Node's `http-server`, etc.)
-- For Library Mode: HTTPS server setup
-
-### Basic Setup (HTTP - Quick Read Only)
-```bash
-# Clone or download the repository
-git clone <repository-url>
-cd Web-Comic-Reader
-
-# Start a local server (choose one):
-# Python 3
-python -m http.server 8000
-
-# Python 2
-python -m SimpleHTTPServer 8000
-
-# Node.js http-server
-npx http-server -p 8000
-
-# PHP
-php -S localhost:8000
-```
-
-Visit `http://localhost:8000` in your browser. Only Quick Read mode will work.
-
-### HTTPS Setup (Required for Library Mode)
-
-To enable Library Mode with folder access, you need HTTPS:
-
-**Option 1: Using nginx-proxy (Recommended for local development)**
-1. Set up nginx-proxy with SSL certificates
-2. Configure proxy to your local server
-3. Access via `https://yourdomain.test`
-
-**Option 2: Using mkcert for local HTTPS**
-```bash
-# Install mkcert
-# macOS
-brew install mkcert
-
-# Create local CA
-mkcert -install
-
-# Generate certificate
-mkcert localhost 127.0.0.1
-
-# Use with your server (example with http-server)
-npx http-server -p 8000 -S -C localhost+1.pem -K localhost+1-key.pem
-```
-
-### File Structure
-```
-├── index.html              # Main HTML file
-├── assets/
-│   ├── css/
-│   │   └── styles.css     # All styles and theming
-│   └── js/
-│       ├── script.js      # Main application logic
-│       └── uncompress/
-│           └── uncompress.js  # Archive extraction
-├── README.md
-└── LICENSE
-```
-
-### Development Notes
-- Reading progress is stored in `localStorage` (key: `comic_reader_userpref`)
-- Folder handles are stored in `IndexedDB` (database: `ComicReaderDB`)
-- Thumbnails are base64-encoded JPEG stored in localStorage
-- Uses vanilla JavaScript (no jQuery required)
-
-## Requirements
-
-- Modern browser with File System Access API support (Chrome, Edge, Opera)
-- **HTTPS required** for Library Mode (folder access)
-- For Quick Read Mode, HTTP is sufficient
-
-## Browser Compatibility
-
-### Library Mode (File System Access API)
-**✅ Fully Supported:**
-- Chrome/Chromium (desktop)
-- Microsoft Edge (desktop)
-- Opera (desktop)
-
-**❌ Not Supported:**
-- Safari (macOS & iOS) - Apple has not implemented this API due to privacy/security concerns
-- Firefox - Partially supported behind flags, not production-ready
-- All iOS browsers (Chrome, Firefox, Edge on iOS) - Use Safari's engine, inherit same limitations
-
-**📝 Note:** Safari and unsupported browsers will automatically fall back to Quick Read mode only. Users can still read comics by uploading individual files, but library features and progress tracking won't be available.
+---
 
 ## Supported Formats
 
-- `.cbr` - Comic Book RAR
-- `.cbz` - Comic Book ZIP
-- `.cbt` - Comic Book TAR
+| Extension | Format |
+|-----------|--------|
+| `.cbz` | Comic Book ZIP |
+| `.cbr` | Comic Book RAR (RAR4; RAR5 not yet supported) |
+| `.cbt` | Comic Book TAR |
 
-## Technical Details
+---
 
-- Pure client-side processing (no server required)
-- Reading progress stored in localStorage
-- Folder handles stored in IndexedDB
-- Thumbnails generated using Canvas API
-- lightGallery for image viewing with zoom and fullscreen
+## Deployment
+
+### Cloudflare Pages (recommended)
+
+1. Fork this repository
+2. In the Cloudflare dashboard → **Pages** → **Connect to Git**
+3. Select your fork; set:
+   - **Build command:** *(leave blank — static site)*
+   - **Build output directory:** `/`
+4. Click **Save and Deploy**
+
+The `_headers` file is automatically applied, serving all security headers. HTTPS is provided automatically by Cloudflare Pages, which enables Library Mode in supported browsers.
+
+#### CLI deploy (Wrangler)
+
+```bash
+npm install
+npm run deploy
+```
+
+---
+
+### Local Development
+
+```bash
+# Quick start (HTTP — Quick Read only)
+npm run dev           # http://localhost:8080
+
+# HTTPS (enables Library Mode)
+mkcert -install && mkcert localhost 127.0.0.1
+npm run dev:https     # https://localhost:8443
+```
+
+---
+
+## Browser Compatibility
+
+| Browser | Library Mode | Quick Read |
+|---------|-------------|------------|
+| Chrome / Edge / Opera (desktop) | ✅ | ✅ |
+| Firefox | ⚠️ flag only | ✅ |
+| Safari / iOS | ❌ | ✅ |
+
+---
+
+## Project Structure
+
+```
+├── index.html              # Entry point — CDN deps pinned, CSP meta tag
+├── assets/
+│   ├── css/styles.css      # All styles + dark mode + v2 additions
+│   └── js/
+│       ├── script.js       # Main application (rewritten v2)
+│       └── uncompress/     # Vendored archive libraries
+├── _headers                # Cloudflare Pages security headers
+├── _redirects              # Cloudflare Pages SPA routing
+├── wrangler.toml           # Cloudflare deploy config
+├── package.json            # Dev scripts
+├── sbom.json               # CycloneDX Software Bill of Materials
+├── SECURITY.md             # Disclosure policy + hardening notes
+└── CHANGELOG.md            # Per-file commit changelog
+```
+
+---
+
+## Security
+
+See [SECURITY.md](./SECURITY.md) for the full policy, applied fixes, and residual risks.  
+To report a vulnerability, open a **private** GitHub Security Advisory.
+
+---
 
 ## Credits
 
-- [Uncompress.js](https://github.com/workhorsy/uncompress.js) - Archive extraction
-- [lightGallery](https://github.com/sachinchoolur/lightGallery) - Image gallery and viewer
-- [Dropzone.js](https://www.dropzone.dev/) - File upload handling
+- [uncompress.js](https://github.com/workhorsy/uncompress.js) — archive extraction
+- [lightGallery v2](https://www.lightgalleryjs.com/) — image gallery
+- [Dropzone.js](https://www.dropzone.dev/) — drag-and-drop
+- [JSZip](https://stuk.github.io/jszip/) — ZIP decompression
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT — see [LICENSE](./LICENSE)

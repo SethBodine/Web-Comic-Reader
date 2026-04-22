@@ -1,0 +1,27 @@
+{
+  "name": "web-comic-reader",
+  "version": "2.0.0",
+  "description": "Modern web-based comic book reader for CBR, CBZ, and CBT files",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "npx http-server -p 8080 -c-1 --cors",
+    "dev:https": "npx http-server -p 8443 -S -C localhost+1.pem -K localhost+1-key.pem --cors",
+    "deploy": "npx wrangler pages deploy . --project-name=web-comic-reader",
+    "lint": "npx eslint assets/js/script.js --no-eslintrc -c .eslintrc.json",
+    "sri": "node scripts/generate-sri.js"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "wrangler": "^3.78.0",
+    "node-fetch": "^3.3.2",
+    "crypto": "*"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afzafri/Web-Comic-Reader"
+  }
+}
