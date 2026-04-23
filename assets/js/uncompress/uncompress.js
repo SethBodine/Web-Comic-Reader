@@ -144,10 +144,16 @@ function archiveOpenFile(file, cb) {
 	reader.onload = function(evt) {
 		var array_buffer = reader.result;
 
-		// Open the file as an archive
+		// archiveOpenArrayBuffer returns a Promise for ZIP (JSZip 3.x async)
+		// but a plain object for RAR and TAR — handle both paths.
 		try {
-			var archive = archiveOpenArrayBuffer(file_name, array_buffer);
-			cb(archive, null);
+			var result = archiveOpenArrayBuffer(file_name, array_buffer);
+			if (result && typeof result.then === 'function') {
+				result.then(function(archive) { cb(archive, null); })
+				      .catch(function(e)      { cb(null, e);       });
+			} else {
+				cb(result, null);
+			}
 		} catch(e) {
 			cb(null, e);
 		}

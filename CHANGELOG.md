@@ -1,374 +1,289 @@
 # Changelog
 
-All changes to this fork of [afzafri/Web-Comic-Reader](https://github.com/afzafri/Web-Comic-Reader).
+Fork of [afzafri/Web-Comic-Reader](https://github.com/afzafri/Web-Comic-Reader).
 
 ---
 
-## Attribution & source verification
+## Source verification
 
-| Source | Branch / ref | Verified via |
-|--------|-------------|-------------|
-| [afzafri/Web-Comic-Reader](https://github.com/afzafri/Web-Comic-Reader) | `master` | Uploaded zip — MD5 checksums confirmed |
-| [DHLKeyuser/Web-Comic-Reader](https://github.com/DHLKeyuser/Web-Comic-Reader) | `cursor/-bc-44021c6b-c202-4236-b537-cf4f28d6e683-cd26` | Uploaded zip — git pack file (truncated due to deleted 1 GB file); working tree intact; diff confirmed against upstream |
-
-The DHLKeyuser fork was cloned from the correct branch. The git pack file was corrupt (large binary deleted before zip), but all working-tree source files were intact and diffed cleanly against upstream.
+| Source | Ref | How confirmed |
+|--------|-----|---------------|
+| afzafri/Web-Comic-Reader | `master` | Uploaded zip; MD5 confirmed |
+| DHLKeyuser/Web-Comic-Reader | `cursor/-bc-44021c6b-c202-4236-b537-cf4f28d6e683-cd26` | Uploaded zip; git pack truncated (large binary deleted before export) but all working-tree source files intact; diff confirmed against upstream |
 
 ---
 
-## [2.2.0] — Reader engine merge from DHLKeyuser fork
+## [2.2.0] — Reader engine merge + no-library rebuild
 
-### Commit 1 — `feat(reader): dual reading mode — Paged and Webtoon/Scroll`
+### Commit 1 — `feat(reader): paged mode — single-image view with lightbox`
 
-**Source:** DHLKeyuser/Web-Comic-Reader cursor branch  
-**Files:** `assets/js/script.js`, `assets/css/styles.css`, `index.html`
+**Source:** DHLKeyuser cursor branch  
+**Files:** `index.html`, `assets/js/script.js`, `assets/css/styles.css`
 
-Replaced the original single-mode thumbnail grid with a full dual-mode reader engine:
+Replaced the original thumbnail-grid output with a structured reader layout. Paged mode renders one full-width image at a time inside `#pagedContainer`.
 
-**Paged mode** (`readingMode === 'paged'`):
-- Renders one full-width image at a time in `#pagedContainer > img#pagedImage`
-- Prev/Next page buttons (`#prevPageBtn`, `#nextPageBtn`) and keyboard `← →`
-- Image click opens lightGallery lightbox for zoom/fullscreen
-- `renderPagedImage(index)` updates `src`, `alt`, and `currentPageIndex`
+- `renderPagedImage(index)` sets `#pagedImage.src`, updates `currentPageIndex`, calls `updatePageIndicator()`
+- `#pagedImageLink` click opens lightGallery lightbox at the current page index via the hidden `#lightboxLinks` anchor pool
+- Prev/Next buttons (`#prevPageBtn`, `#nextPageBtn`) call `goToRelativePage(±1)`
+- `←` / `→` keyboard shortcuts via `handleKeydown()` — ignored when `document.body.classList.contains('lg-on')` (lightbox open) or focus is in a text field
+- Mode button gets `.active` class + `aria-pressed="true"`
+- `applyReadingMode()` shows `#pagedContainer`, hides `#scrollContainer`, removes `#output.scroll-mode`, deactivates webtoon dock
 
-**Webtoon / Scroll mode** (`readingMode === 'scroll'`):
-- `buildScrollPages()` renders all pages as vertical strip in `#scrollContainer`
-- Each `<div class="scroll-page">` holds a lazy-loaded `<img data-src="...">` decoded with `IntersectionObserver` (800px root margin)
-- `#output` gets class `scroll-mode` which sets full-width layout and removes card padding
-- `applySmartGapState()` tightens `margin-bottom` between pages whose edges are white
+**New elements:** `#pagedContainer`, `#pagedImageLink`, `#pagedImage`, `#lightboxLinks`
 
-**Mode switching:**
-- `setReadingMode(mode)` persists to `localStorage` (key `readerMode`) and calls `applyReadingMode()`
-- Toolbar mode buttons get `.active` class and `aria-pressed`
-- Mode is restored from `localStorage` on next open; per-chapter `chapterProgress.mode` takes priority
-
-**New HTML elements (index.html):**
-- `#readerToolbar` — flexbox toolbar with mode toggle, nav, chapter, zoom, smart-gap
-- `#pagedContainer` / `#pagedImageLink` / `#pagedImage`
-- `#scrollContainer`
-- `#lightboxLinks` — hidden anchor pool for lightGallery
-- `#webtoonDock`, `#webtoonDockContent`, `#dockToggleBtn`, `#dockPageIndicator`
-- `#dockPrevChapterBtn`, `#dockNextChapterBtn`
-- `#nextChapterFloat`
-
-**New CSS classes (styles.css):**
-- `.reader-toolbar`, `.reader-toolbar-group`, `.toolbar-label`
-- `.mode-toggle`, `.mode-btn`, `.mode-btn.active`
-- `.reader-btn`, `.reader-btn:disabled`
-- `.page-indicator`, `.zoom-level`, `.smart-gap-toggle`
-- `.reader-meta`
-- `.paged-container`, `.paged-image-link`, `.paged-image`
-- `.lightbox-links`
-- `.scroll-container`, `.scroll-page`, `.scroll-page--tight`
-- `#output.scroll-mode` (full-width layout override)
+**New CSS:** `.paged-container`, `.paged-image-link`, `.paged-image`, `.lightbox-links`
 
 ---
 
-### Commit 2 — `feat(reader): webtoon dock — fixed bottom bar with auto-hide`
+### Commit 2 — `feat(reader): webtoon/scroll mode — continuous vertical strip with lazy loading`
 
-**Source:** DHLKeyuser/Web-Comic-Reader cursor branch  
+**Source:** DHLKeyuser cursor branch  
 **Files:** `assets/js/script.js`, `assets/css/styles.css`
 
-**Webtoon dock** — a fixed bottom panel that appears only in scroll mode:
-- `activateWebtoonDock()` moves `#readerToolbar` into `#webtoonDockContent` and shows the dock
-- `deactivateWebtoonDock()` returns toolbar to its original position in `#output`
-- `setDockCollapsed(bool)` persists collapsed state to `localStorage` (key `webtoonDockCollapsed`)
-- `updateDockState()` toggles `.collapsed`/`.expanded` and updates `aria-expanded`
-- **Auto-hide on scroll-down:** `handleDockAutoHide(delta)` adds `.auto-hidden` (CSS `transform: translateY(100%)`) when user scrolls down > 6px; removed on scroll-up. Prevents dock from obscuring content while reading.
-- **Tap-to-toggle:** `handleScrollContainerTap()` listens for clicks on the centre 50% of `#scrollContainer`; taps toggle dock collapse. Taps on interactive elements are ignored.
-- `updateDockPadding()` sets `--dock-safe-offset` CSS var and `paddingBottom` on `#scrollContainer` so content never hides behind the dock.
+Scroll mode renders all pages as a continuous vertical strip in `#scrollContainer`.
 
-**New CSS:** `.webtoon-dock`, `.webtoon-dock.collapsed`, `.webtoon-dock.expanded`, `.webtoon-dock.auto-hidden`, `.webtoon-dock-handle`, `.webtoon-dock-content`, `.dock-page-indicator`, `.dock-chapter-btn`, `.dock-toggle-btn`, `.dock-toggle-icon`, `.next-chapter-float`
+**`buildScrollPages()`** — called once per comic; builds `div.scroll-page > img[data-src]` elements. Images use `data-src` rather than `src` to defer decoding until near-viewport.
+
+**`initLazyObserver()`** — `IntersectionObserver` with 800px root margin. `setImgSrc(img)` moves `data-src` → `src` when page intersects. Falls back to eager-load if observer unavailable.
+
+**`initScrollObserver()`** — second `IntersectionObserver` with thresholds `[0, 0.25, 0.5, 0.75, 1]` on each `.scroll-page`. Tracks `visibilityRatios` Map; `currentScrollIdx` updated to most-visible page index. Drives live page indicator and debounced `localStorage` save (`lastScrollPage_<filename>`).
+
+`applyReadingMode('scroll')` adds `#output.scroll-mode` (full-width, no card border), shows `#scrollContainer`, hides `#pagedContainer`, activates webtoon dock.
+
+**New element:** `#scrollContainer`
+
+**New CSS:** `.scroll-container`, `.scroll-page`, `#output.scroll-mode` (full-width override)
 
 ---
 
-### Commit 3 — `feat(reader): scroll zoom, smart gap removal, lazy loading`
+### Commit 3 — `feat(reader): webtoon dock — fixed bottom bar, auto-hide, tap-to-toggle`
 
-**Source:** DHLKeyuser/Web-Comic-Reader cursor branch  
+**Source:** DHLKeyuser cursor branch  
+**Files:** `index.html`, `assets/js/script.js`, `assets/css/styles.css`
+
+**`activateWebtoonDock()`** — moves `#readerToolbar` into `#webtoonDockContent`; shows `#webtoonDock`; calls `updateDockState()` and `updateDockPadding()`.
+
+**`deactivateWebtoonDock()`** — returns `#readerToolbar` to `#output`; hides dock; clears `paddingBottom` on `#scrollContainer`.
+
+**`setDockCollapsed(bool)`** — toggles `.collapsed`/`.expanded` classes; persists to `localStorage` (`webtoonDockCollapsed`); updates `aria-expanded` and `aria-label` on `#dockToggleBtn`.
+
+**`updateDockPadding()`** — measures dock height via `getBoundingClientRect().height`; sets `paddingBottom` on `#scrollContainer` and CSS var `--dock-safe-offset` so content is never hidden behind the dock.
+
+**Auto-hide on scroll-down** (`handleWindowScroll()`):
+- Computes delta from previous `scrollY`
+- If `|delta| >= 6`: scroll-down → adds `.auto-hidden` (`transform: translateY(100%); opacity: 0`); scroll-up → removes it
+- Only active in scroll mode
+
+**Tap-to-toggle** (`handleScrollTap(event)`):
+- Listens on `#scrollContainer` click
+- Ignores taps on interactive elements (`button`, `a`, `input`, `select`, `label`)
+- If tap x-position is in the centre 50% of viewport: if dock is auto-hidden → show it; else toggle collapsed
+
+**New elements:** `#webtoonDock`, `#webtoonDockContent`, `#webtoonDock-handle`, `#dockToggleBtn`, `#dockPageIndicator`
+
+**New CSS:** `.webtoon-dock`, `.webtoon-dock.collapsed`, `.webtoon-dock.expanded`, `.webtoon-dock.auto-hidden`, `.webtoon-dock-handle`, `.webtoon-dock-content`, `.dock-page-indicator`, `.dock-toggle-btn`, `.dock-toggle-icon`
+
+---
+
+### Commit 4 — `feat(reader): scroll zoom — +/− controls, 10%–200%, persisted`
+
+**Source:** DHLKeyuser cursor branch  
+**Files:** `assets/js/script.js`
+
+**`adjustScrollZoom(delta)`** — increments `scrollZoom` by `delta`, clamped to `[0.1, 2.0]`, calls `applyScrollZoom()`.
+
+**`applyScrollZoom()`** — computes `w = min(90 * scrollZoom, 100) vw`; sets CSS var `--scroll-image-width` on `#scrollContainer`. `.scroll-page img` reads this via `width: var(--scroll-image-width, 90vw)`. Persists to `localStorage` (`scrollZoom`). Calls `updateZoomControls()`.
+
+**`updateZoomControls()`** — updates `#zoomLevel` text label; disables zoom buttons in paged mode.
+
+Zoom buttons (`#zoomOutBtn`, `#zoomInBtn`) are disabled with `.disabled` styling when `readingMode === 'paged'`.
+
+---
+
+### Commit 5 — `feat(reader): smart gap removal — canvas whitespace detection`
+
+**Source:** DHLKeyuser cursor branch  
 **Files:** `assets/js/script.js`, `assets/css/styles.css`
 
-**Scroll zoom:**
-- `adjustScrollZoom(delta)` increments `scrollZoom` (clamped 0.1–2.0) and calls `applyScrollZoom()`
-- `applyScrollZoom()` sets CSS var `--scroll-image-width` on `#scrollContainer` which `.scroll-page img` reads via `width: var(--scroll-image-width, 90vw)`
-- Zoom persisted to `localStorage` (key `scrollZoom`); restored on chapter open
-- Zoom controls disabled in paged mode; `updateZoomControls()` reflects 100% label
+**`analyzeWhitespace(img, index)`** — called on each scroll-mode image's `load` event:
+- Creates an offscreen canvas (120×10px)
+- Samples a 20px strip from the top edge of the image → `topWhite`
+- Samples a 20px strip from the bottom edge → `bottomWhite`
+- `isStripWhite()` counts pixels with R, G, B all > 240; returns `true` if >92% are white
+- Stores result in `scrollEdgeData[index] = { topWhite, bottomWhite }`
+- Calls `updateSmartGapAt(index)` for the page and its neighbours
 
-**Smart gap removal:**
-- `analyzeImageWhitespace(img, index)` called on each image `onload`
-- Canvas-samples a 120×10px strip at top and bottom of the image
-- If > 92% of sampled pixels have RGB > 240 (near-white), marks edge as white
-- `updateSmartGapForIndex(index)` compares adjacent page edges; if both touching edges are white, adds `scroll-page--tight` class (reduces `margin-bottom` to 6px)
-- `applySmartGapState()` re-applies all tight classes when toggle changes
-- Toggle state persisted to `localStorage` (key `scrollSmartGap`)
+**`updateSmartGapAt(index)`** — if smart gap is enabled, checks if `scrollEdgeData[index].bottomWhite && scrollEdgeData[index+1].topWhite`; if so, adds `.scroll-page--tight` to page `index` (reduces `margin-bottom` to 6px in webtoon mode, 0 in full-strip mode).
 
-**Lazy loading:**
-- `initLazyObserver()` uses `IntersectionObserver` with 800px root margin
-- Images stored with `data-src`; `setImageSource(img)` moves to `src` when intersecting
-- Falls back to eager load if `IntersectionObserver` unavailable
+**`applySmartGapState()`** — re-evaluates all pages when the toggle changes; called on `#smartGapToggle` change event.
 
-**Scroll position tracking:**
-- `initScrollObserver()` uses `IntersectionObserver` with thresholds [0, 0.25, 0.5, 0.75, 1]
-- `visibilityRatios` Map tracks each page's visibility; `currentScrollIndex` updated to most-visible page
-- `scheduleSaveProgress(index)` debounces 200ms before saving to `localStorage`
-- `scheduleScrollProgressSave()` debounces 300ms to save `scrollRatio` (precise position within chapter)
+**New CSS:** `.scroll-page--tight`, `#output.scroll-mode .scroll-page--tight`
 
 ---
 
-### Commit 4 — `feat(reader): chapter navigation, auto-advance, keyboard nav`
+### Commit 6 — `feat(reader): mode toggle, page indicator, restart, keyboard nav`
 
-**Source:** DHLKeyuser/Web-Comic-Reader cursor branch  
-**Files:** `assets/js/script.js`, `index.html`
+**Source:** DHLKeyuser cursor branch  
+**Files:** `index.html`, `assets/js/script.js`, `assets/css/styles.css`
 
-**Chapter navigation:**
-- `openComic(file, { fromLibrary: true })` sets `currentChapterFromLibrary = true`
-- `updateChapterContext(filename, fromLibrary)` finds the comic's index in `libraryComicList`
-- `updateChapterButtons()` shows/enables prev/next chapter buttons based on index
-- `openAdjacentChapter(offset)` saves current progress then opens `libraryComicList[currentChapterIndex + offset]`
-- Chapter group hidden when not in library mode
+**`setReadingMode(mode)`** — guards against no-op; sets `readingMode`; persists to `localStorage` (`readerMode`); calls `applyReadingMode(true)`.
 
-**Auto-advance:**
-- `isNearBottomOfChapter()` checks if last page's bottom is within 400px of viewport bottom
-- `scheduleAutoAdvanceAfterIdle()` waits 250ms of scroll-idle then queues a 1000ms timer to call `goToNextChapter()`
-- Cancels if user scrolls back up, or if `autoAdvanceEnabled` is false
-- `#nextChapterFloat` button shown when near chapter end; click advances immediately
-- Setting persisted via `readerSettings.autoAdvance`
+**Mode is restored** from `localStorage` on page load. Clamped to `'scroll' | 'paged'`.
 
-**Keyboard navigation:**
-- `handleReaderKeydown(event)` bound to `document` `keydown`
-- `ArrowLeft` → `goToRelativePage(-1)`, `ArrowRight` → `goToRelativePage(1)`
-- Ignored when focus is in `INPUT`, `TEXTAREA`, `SELECT`, or `contentEditable`
-- Ignored when lightGallery is open (`document.body.classList.contains('lg-on')`)
+**`updateModeButtons()`** — toggles `.active` class and `aria-pressed` on `.mode-btn[data-reading-mode]` elements.
 
-**Scroll ratio persistence:**
-- `getScrollRatio()` computes `(window.scrollY - containerTop) / maxScroll` → 0–1
-- `scrollToScrollRatio(ratio)` restores exact position
-- `restoreScrollRatio(ratio)` uses `requestAnimationFrame` + 250ms fallback for reliable restore after async page render
+**`updatePageIndicator()`** — writes `"N / total"` to `#pageIndicator` (toolbar) and `#dockPageIndicator` (dock).
 
-**Restart chapter:**
-- `restartChapter()` clears chapter progress, resets indices to 0, scrolls to top or renders page 0
+**`restartComic()`** — resets `currentPageIndex` and `currentScrollIdx` to 0; scrolls to top or renders page 0.
+
+**Keyboard nav (`handleKeydown`)** bound to `document` `keydown`:
+- Guards: `outputEl` must be visible; focus not in text input; lightbox not open
+- `ArrowLeft` → `goToRelativePage(-1)`
+- `ArrowRight` → `goToRelativePage(1)`
+- `event.preventDefault()` called to suppress browser scroll on arrow keys
+
+**New HTML:** `#readerToolbar` with `.mode-toggle`, `.mode-btn`, `#prevPageBtn`, `#nextPageBtn`, `#pageIndicator`, `#zoomOutBtn`, `#zoomInBtn`, `#zoomLevel`, `#smartGapToggle`, `#restartChapterBtn`
+
+**New CSS:** `.reader-toolbar`, `.reader-toolbar-group`, `.toolbar-label`, `.mode-toggle`, `.mode-btn`, `.mode-btn.active`, `.reader-btn`, `.page-indicator`, `.zoom-level`, `.smart-gap-toggle`
 
 ---
 
-### Commit 5 — `feat(library): series grouping, progress bars, settings panel`
+### Commit 7 — `feat(archive): port naturalCompare for correct numeric page ordering`
 
-**Source:** DHLKeyuser/Web-Comic-Reader cursor branch  
-**Files:** `assets/js/script.js`, `assets/css/styles.css`, `index.html`
-
-**Series grouping:**
-- `buildSeriesGroups(comics)` groups filenames by `parseSeriesKey(filename)`
-- `parseSeriesKey()` strips volume/chapter numbers, years, scan tags, and special chars to produce a stable group key
-- `formatSeriesTitle()` produces a display title using similar heuristics
-- `renderSeriesLibrary(seriesList)` builds collapsible `.series-item` accordion elements
-- Each chapter row shows filename, `formatProgressLabel()`, and a `<div class="progress-bar">` fill
-
-**Per-chapter progress store** (separate from `comic_reader_userpref`):
-- Key: `comicChapterProgress` in `localStorage`
-- Schema: `{ [filename]: { mode, pageIndex, scrollRatio, webtoonZoom, pagedZoom, lastRead, pageCount } }`
-- `saveChapterProgress(filename, overrides)` merges with existing entry
-- `getProgressPercent(progress)` returns 0–100 from `scrollRatio` or `pageIndex/pageCount`
-- `formatProgressLabel(progress)` returns "42% read" (webtoon) or "Page 7" (paged) or "Not started"
-- `getLatestSeriesProgress(chapters, store)` finds most-recently-read chapter in a series
-
-**Settings panel** (`#settingsPanel`):
-- Default reading mode select (`scroll` / `paged`) — persisted to `comicReaderSettings`
-- Auto-advance toggle — persisted to `comicReaderSettings`
-- Reset all progress button — clears `comicChapterProgress`, refreshes lists
-- Panel toggled by `#settingsToggleBtn` in library header
-
-**New CSS:** `.settings-panel`, `.settings-row`, `.settings-toggle`, `.settings-select`, `.link-btn.danger`, `.series-list`, `.series-item`, `.series-item.expanded`, `.series-header`, `.series-title`, `.series-meta`, `.series-toggle`, `.series-chapters`, `.series-chapter`, `.series-chapter-title`, `.series-chapter-meta`, `.progress-bar`, `.progress-bar-fill`
-
----
-
-### Commit 6 — `fix(deps): vendor Dropzone, upgrade lightGallery and JSZip`
-
-**Files:** `index.html`, `assets/js/vendor/dropzone.min.js` *(new)*, `assets/js/vendor/dropzone.min.css` *(new)*
-
-**Problem:** Dropzone was loaded from a floating CDN URL (`unpkg.com/dropzone` — no version pin). Dropzone 6.0.0 changed its dist layout to ESM-first; the UMD bundle moved and both CDNs served it as `Content-Type: text/plain`. With `X-Content-Type-Options: nosniff` active this caused:
-```
-MIME type mismatch — resource blocked
-Cross-Origin Request Blocked
-Uncaught ReferenceError: Dropzone is not defined
-```
-
-**Fix:** Dropzone vendored locally at `assets/js/vendor/dropzone.min.js` — same origin, correct MIME guaranteed.
-
-**lightGallery 1.4.0 → 2.7.2:**
-- v1 abandoned since 2019; multiple XSS vectors in plugin callback APIs
-- v2 UMD bundle served from `cdn.jsdelivr.net/npm/lightgallery@2.7.2/` with correct MIME and CORS
-- All plugin scripts updated to v2 UMD paths (`lg-zoom.umd.min.js` etc.)
-
-**JSZip bundled 2.x → CDN 3.10.1:**
-- 2.x had no path-traversal protection on ZIP entry names
-- 3.x validates entry names and uses Promise API throughout
-- `uncompress.js` patched: `new JSZip(buf)` → `JSZip.loadAsync(buf)`, `entry.asArrayBuffer()` → `entry.async('arraybuffer')`
-
----
-
-### Commit 7 — `fix(security): XSS, localStorage sanitisation, file validation, blob leaks`
-
+**Source:** DHLKeyuser cursor branch  
 **Files:** `assets/js/script.js`
 
-**XSS — innerHTML with user-controlled data (High):**
-- `showLibraryMode()`: folder name now built via `document.createElementNS` + `textContent`, not `` innerHTML = `...${handle.name}` ``
-- All filename display uses `textContent` assignment only
-- Static SVG icons that contain no user data may still use `innerHTML` for the SVG markup itself
-
-**localStorage injection (Medium):**
-- `saveLastPageRead()` continues to write; reads validated by `safeReadHistory()` in our security layer
-- Note: DHLKeyuser's `saveChapterProgress()` writes to `comicChapterProgress` key — this is a structured object with numeric/string values only, lower risk. No sanitisation added there to preserve exact fork behaviour.
-
-**File validation (Medium):**
-- `validateFile(file)` called in Dropzone `addedfile` handler before `openComic()`
-- Extension must be in `ALLOWED_EXT` Set (`.cbr`, `.cbz`, `.cbt`)
-- File size must be ≤ 1 GB (`MAX_FILE_BYTES`)
-
-**Blob URL leaks (Low):**
-- `_activeBlobURLs` Set tracks all created URLs
-- `clearBlobs()` now revokes both the Set and the `pageUrls` array
-- Individual revoke on `img.onload`/`img.onerror` added for scroll-mode images
-
-**IndexedDB version bump:**
-- `openDB()` uses version 2; `onupgradeneeded` drops and recreates `directories` store to clear stale v1 handles
-
----
-
-### Commit 8 — `fix: lightGallery v2 API — init, event name`
-
-**Files:** `assets/js/script.js`
-
-DHLKeyuser's fork called `lightGallery(el, opts)` (v1 global) and listened to `onAfterSlide`. With the v2 CDN bundle:
+Replaced `String.localeCompare()` sort with DHLKeyuser's `naturalCompare(a, b)`:
 
 ```js
-// BEFORE — v1 API (silent failure with v2 bundle)
-lightGallery(lightboxLinksEl, { zoom: true, fullScreen: true, ... });
-lightboxLinksEl.addEventListener('onAfterSlide', handleLightboxSlide);
-
-// AFTER — v2 API
-window.lightGallery(lightboxLinksEl, {
-    plugins: [window.lgZoom, window.lgFullscreen, window.lgThumbnail, window.lgAutoplay, window.lgRotate],
-    zoom: true, download: false, ...
-});
-lightboxLinksEl.addEventListener('lgAfterSlide', handleLightboxSlide);  // v2 event name
+// Splits each name into numeric and non-numeric chunks, compares numerically
+// where both chunks are digits — so "page10" sorts after "page9".
+const ax = String(a).toLowerCase().match(/\d+|\D+/g) || [];
+const bx = String(b).toLowerCase().match(/\d+|\D+/g) || [];
 ```
+
+This handles edge cases that `localeCompare({ numeric: true })` can miss on some locale configurations (e.g. filenames mixing scripts).
 
 ---
 
-### Commit 9 — `fix(dropzone): set autoDiscover=false unconditionally before init`
-
-**Files:** `assets/js/script.js`
-
-DHLKeyuser's fork used `if (window.Dropzone) Dropzone.autoDiscover = false` — this guard ran during script parse, sometimes before the vendored `dropzone.min.js` was evaluated, leaving auto-discovery enabled and causing a second (failed) init attempt.
-
-**Fix:** `Dropzone.autoDiscover = false` set unconditionally at the top of the Dropzone init block, after all scripts are guaranteed to have loaded (inside `DOMContentLoaded`).
-
----
-
-### Commit 10 — `fix(css): remove invalid float:center, fix output layout`
-
-**Files:** `assets/css/styles.css`
-
-The original upstream CSS used `float: center` on `.imgUrl` — an invalid value Firefox reported as:
-```
-Error in parsing value for 'float'. Declaration dropped.
-```
-DHLKeyuser's restructured `#output` already removed this pattern, but an explicit reset guard is appended to prevent regression:
-```css
-.imgUrl { float: none; }
-```
-
----
-
-### Commit 11 — `feat: large file support up to 1 GB with chunked streaming`
+### Commit 8 — `feat(large-file): chunked FileReader, 64 MiB slices, byte progress bar`
 
 **Files:** `assets/js/script.js`, `index.html`, `assets/css/styles.css`
 
 **`readFileChunked(file, onComplete, onProgress)`:**
-- Files ≤ 100 MB: `archiveOpenFile()` single-read fast path
-- Files > 100 MB: reads in 64 MiB slices via `file.slice(offset, end)`, assembles into single `Uint8Array`, yields between chunks via `setTimeout(next, 0)`
-- `onProgress(bytesRead, total)` drives `#chunkBar` width and `#chunkLabel` text
-- File size capped at 1 GB; rejected before any archive processing
+- Files ≤ 100 MB: `archiveOpenFile()` single-read fast path (callback API, works for all formats)
+- Files > 100 MB: reads in 64 MiB slices via `file.slice(offset, end)` + `FileReader.readAsArrayBuffer`
+- `setTimeout(next, 0)` between chunks to keep UI responsive
+- Assembles all chunks into one `Uint8Array` before passing to `archiveOpenArrayBuffer()`
+- `archiveOpenArrayBuffer()` returns a Promise for ZIP (JSZip 3.x), plain object for RAR/TAR — both handled
 
-**New HTML elements:** `#chunkProgress`, `#chunkBar`, `#chunkLabel`, `#fileSizeWarning`
+**`onProgress(bytesRead, total)` callback:**
+- Updates `#chunkBar` width (`width: pct%`)
+- Updates `#chunkLabel` text (`Loading X MB / Y MB (Z%)`)
+
+**`#chunkProgress`** shown only for files > 100 MB. `#fileSizeWarning` amber banner shown immediately on file selection before reading begins.
+
+**New HTML:** `#chunkProgress`, `#chunkBar`, `#chunkLabel`, `#fileSizeWarning`
 
 **New CSS:** `.chunk-progress`, `.chunk-bar-wrap`, `.chunk-bar`, `.chunk-label`, `.file-size-warning`
 
 ---
 
-### Commit 12 — `feat(ux): drag-drop enhancements, large-file warning banner`
+### Commit 9 — `fix(security): XSS, file validation, blob URL tracking`
 
-**Files:** `index.html`, `assets/css/styles.css`
+**Files:** `assets/js/script.js`
 
-- Dropzone form updated with upload arrow icon (SVG), `.dz-main-text`, `.dz-sub-text`, `.hint`
-- `#fileSizeWarning` amber banner shown for files > 100 MB before reading begins
-- `dz-drag-hover` class toggled by Dropzone events — highlights border and background
-- `<noscript>` fallback message
-- `rel="noopener noreferrer"` on GitHub footer link
-- `aria-label` and `role` on interactive elements
+**XSS — no innerHTML with user-controlled data:**
+- Archive filename written via `readerMetaEl.textContent` only
+- Error messages written via `span.textContent` only — no template literals with user input
+- `[SEC]` comments mark every location
 
-**New CSS:** `.dz-upload-icon`, `.dz-main-text`, `.dz-sub-text`, `.file-size-warning`
+**`validateFile(file)`:**
+- Extension must be in `ALLOWED_EXT` Set (`.cbr`, `.cbz`, `.cbt`)
+- File size must be ≤ `MAX_FILE_BYTES` (1 GB)
+- Called in Dropzone `addedfile` handler before `openComic()` is called
+
+**Blob URL tracking:**
+- `activeBlobURLs` Set tracks every URL created by `URL.createObjectURL()`
+- `revokeAllBlobs()` iterates the Set and revokes all; called at the start of every `openComic()` call
+- Prevents blob URL accumulation across multiple comic opens in the same session
 
 ---
 
-### Commit 13 — `chore: Cloudflare Pages deployment config`
+### Commit 10 — `fix(deps): vendor Dropzone, upgrade lightGallery and JSZip`
 
-**Files:** `_headers` *(new)*, `_redirects` *(new)*, `wrangler.toml` *(new)*, `package.json` *(new)*
+**Files:** `index.html`, `assets/js/vendor/dropzone.min.js` *(new)*, `assets/js/vendor/dropzone.min.css` *(new)*
 
-**`_headers`** — HTTP security headers applied at Cloudflare edge:
-- `Content-Security-Policy` — scripts from `'self'` + `cdn.jsdelivr.net` only; `frame-ancestors 'none'` (**HTTP header only** — removed from `<meta>` where browsers ignore it)
-- `X-Frame-Options: DENY`
-- `X-Content-Type-Options: nosniff`
+**Dropzone — vendored locally:**
+Dropzone 6.x changed its dist layout to ESM-first; both `unpkg.com` and `jsdelivr.net` served the file as `Content-Type: text/plain`. With `X-Content-Type-Options: nosniff` active the browser blocked it, producing:
+```
+MIME type mismatch — resource blocked
+Cross-Origin Request Blocked
+Uncaught ReferenceError: Dropzone is not defined
+```
+Vendored locally as `assets/js/vendor/dropzone.min.js` — served from same origin, correct MIME guaranteed, zero CDN dependency.
+
+`Dropzone.autoDiscover = false` now set **unconditionally** before `new Dropzone()`. The previous `if (window.Dropzone)` guard sometimes ran before the script was evaluated.
+
+**lightGallery 1.4.0 → 2.7.2 (CDN):**
+- v1 abandoned 2019; known XSS in plugin callback APIs
+- v2 UMD bundle from `cdn.jsdelivr.net/npm/lightgallery@2.7.2/` — correct MIME, active maintenance
+- Init API changed: `lightGallery(el, opts)` → `window.lightGallery(el, { plugins: [...], ... })`
+- Event name changed: `onAfterSlide` → `lgAfterSlide`
+
+**JSZip bundled 2.x → CDN 3.10.1:**
+- 2.x had no path-traversal protection on ZIP entry names
+- 3.x uses async Promise API throughout
+- `uncompress.js` patched: `new JSZip(buf)` → `JSZip.loadAsync(buf)`, `.asArrayBuffer()` → `.async('arraybuffer')`
+
+---
+
+### Commit 11 — `fix(css): remove float:center, fix output layout; fix CSP meta`
+
+**Files:** `assets/css/styles.css`, `index.html`
+
+**CSS — `float: center` removed:**  
+`float: center` is not a valid CSS value. Firefox logged:
+```
+Error in parsing value for 'float'. Declaration dropped.
+```
+on every page load. Removed from `.imgUrl`; `#output` now uses standard block/flex layout appropriate to the mode.
+
+**CSP meta — `frame-ancestors` removed:**  
+`frame-ancestors` is a fetch directive that browsers have never honoured in `<meta>` CSP elements. It was generating a console warning on every page load. Moved to the HTTP `_headers` file only, where it is correctly enforced by Cloudflare Pages.
+
+**`'unsafe-eval'` removed from `script-src`:**  
+Was previously included for the old asm.js JSZip 2.x path. JSZip 3.x does not use `eval()`, so the directive is no longer required.
+
+---
+
+### Commit 12 — `chore: Cloudflare Pages config, SBOM, security docs`
+
+**Files:** `_headers` *(new)*, `_redirects` *(new)*, `wrangler.toml` *(new)*, `package.json` *(new)*, `sbom.json` *(new)*, `SECURITY.md` *(new)*
+
+**`_headers`** — HTTP security headers at Cloudflare edge:
+- `Content-Security-Policy`: scripts `'self'` + `cdn.jsdelivr.net`; styles same + `'unsafe-inline'`; `frame-ancestors 'none'` (HTTP header only)
+- `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy` — disables unused APIs
-- `Strict-Transport-Security` — 1-year max-age
+- `Strict-Transport-Security` — 1-year max-age + preload
 - `Cross-Origin-Opener-Policy`, `Cross-Origin-Embedder-Policy`, `Cross-Origin-Resource-Policy`
 
-**`_redirects`** — `/* /index.html 200` for SPA routing
+**`_redirects`** — `/* /index.html 200` SPA catch-all
 
 **`wrangler.toml`** — project name `web-comic-reader`, publish `.`
 
-**`package.json`** — `npm run dev`, `npm run dev:https`, `npm run deploy`
+**`package.json`** — `npm run dev` (HTTP), `npm run dev:https` (mkcert HTTPS), `npm run deploy` (Wrangler)
+
+**`sbom.json`** — CycloneDX 1.5 SBOM listing all runtime dependencies with version, licence, CDN source, and upgrade rationale
+
+**`SECURITY.md`** — disclosure policy, all applied fixes with before/after examples, residual risk register (libunrar.js age, `unsafe-inline` requirement, localStorage limits)
 
 ---
 
-### Commit 14 — `docs: SBOM, SECURITY.md, README, CHANGELOG`
+## [2.0.0 / 2.1.0] — Incorporated into 2.2.0
 
-**Files:** `sbom.json`, `SECURITY.md`, `README.md`, `CHANGELOG.md`
-
-**`sbom.json`** — CycloneDX 1.5 Software Bill of Materials:
-- All runtime dependencies with version, licence, CDN source, upgrade rationale
-- Documents DHLKeyuser fork as a source reference
-
-**`SECURITY.md`** — vulnerability disclosure policy, all applied fixes with before/after examples, residual risk register
-
-**`README.md`** — feature table, DHLKeyuser attribution table, deployment guide, browser compatibility
-
----
-
-## [2.1.0] — Console error fixes
-
-**Commits from this version merged into 2.2.0 above.**
-
-Key fixes introduced in 2.1.0:
-- Dropzone CDN → vendored local
-- `float: center` → `float: none`
-- lightGallery v1 → v2 API
-- `frame-ancestors` removed from `<meta>` CSP
-- `Dropzone.autoDiscover = false` unconditional
-- Gallery selector `'a'` → `'a[id="comicImg"]'` (now superseded by DHLKeyuser's `#lightboxLinks` pool)
-
----
-
-## [2.0.0] — Security hardening and infrastructure
-
-**Commits from this version merged into 2.2.0 above.**
-
-Key changes introduced in 2.0.0:
-- lightGallery 1.4 → 2.7.2
-- JSZip 2.x → 3.10.1
-- `uncompress.js` patched for JSZip 3.x async API
-- XSS fixes (innerHTML → textContent)
-- `safeReadHistory()` localStorage sanitisation
-- Cloudflare Pages `_headers`/`_redirects`/`wrangler.toml`
-- `sbom.json` CycloneDX SBOM
+The dependency upgrades, JSZip 3.x `uncompress.js` patch, CSP infrastructure, and initial security work from v2.0.0 and v2.1.0 are all present in the v2.2.0 commits above.
 
 ---
 

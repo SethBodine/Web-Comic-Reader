@@ -1,48 +1,63 @@
-:root {
-    --bg: #f7f8fb;
-    --card: #fff;
-    --border: #e5e7eb;
-    --text: #111;
-    --muted: #6b7280;
-    --brand: #2563eb;
-}
+/*
+ * Web Comic Reader — styles.css  v2.2.0
+ *
+ * CHANGELOG
+ * ─────────────────────────────────────────────────────────────────────────
+ * Scope: upload panel + reader only. No library/series/settings styles.
+ *
+ * [DHL] Reader toolbar (.reader-toolbar, .mode-toggle, .mode-btn,
+ *       .reader-btn, .page-indicator, .zoom-level, .smart-gap-toggle)
+ * [DHL] Paged mode (.paged-container, .paged-image-link, .paged-image)
+ * [DHL] Scroll/Webtoon mode (.scroll-container, .scroll-page,
+ *       .scroll-page--tight, #output.scroll-mode)
+ * [DHL] Webtoon dock (.webtoon-dock, .webtoon-dock-handle,
+ *       .webtoon-dock-content, .dock-page-indicator, .dock-toggle-btn,
+ *       .dock-toggle-icon, .webtoon-dock.auto-hidden)
+ * [FIX] float:center removed — #output uses flexbox for paged thumbnail grid
+ * [FEAT] Drag-drop zone enhancements
+ * [FEAT] .chunk-progress / .chunk-bar progress bar for large files
+ * [FEAT] .file-size-warning amber banner
+ * ─────────────────────────────────────────────────────────────────────────
+ */
 
+/* ── Design tokens ─────────────────────────────────────────────────────── */
+:root {
+    --bg:     #f7f8fb;
+    --card:   #ffffff;
+    --border: #e5e7eb;
+    --text:   #111111;
+    --muted:  #6b7280;
+    --brand:  #2563eb;
+}
 @media (prefers-color-scheme: dark) {
     :root {
-        --bg: #0b0c0e;
-        --card: #121418;
+        --bg:     #0b0c0e;
+        --card:   #121418;
         --border: #1e232a;
-        --text: #e5e7eb;
-        --muted: #9ca3af;
+        --text:   #e5e7eb;
+        --muted:  #9ca3af;
     }
 }
 
-* {
-    box-sizing: border-box;
-}
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
+/* ── Page layout ────────────────────────────────────────────────────────── */
 body {
     margin: 0;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-height: 100vh;
     padding: 40px 0;
 }
 
-body:has(#output[style*="display: block"]) {
-    justify-content: flex-start;
-}
-
-body:not(:has(#output[style*="display: block"])) {
-    justify-content: center;
-}
-
+/* ── Upload card ────────────────────────────────────────────────────────── */
 .wrap {
-    width: min(600px, 90%);
+    width: min(560px, 90%);
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -50,1035 +65,84 @@ body:not(:has(#output[style*="display: block"])) {
     padding: 30px 26px;
     text-align: center;
     position: relative;
+    margin-bottom: 20px;
 }
 
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+p  { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+
+/* ── Collapse button ────────────────────────────────────────────────────── */
 .collapse-btn {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 28px;
-    height: 28px;
+    top: 10px; right: 10px;
+    width: 28px; height: 28px;
     padding: 0;
     background: var(--bg);
     color: var(--text);
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: all .2s;
     display: none;
     align-items: center;
     justify-content: center;
-    opacity: 0.6;
+    opacity: .6;
+    transition: opacity .2s;
 }
+.collapse-btn:hover  { opacity: 1; background: var(--border); }
+.collapse-btn.show   { display: flex; }
+.wrap.collapsed .collapse-btn { display: none; }
 
-.collapse-btn:hover {
-    opacity: 1;
-    background: var(--border);
-}
+/* ── Collapsed state ────────────────────────────────────────────────────── */
+.wrap.collapsed            { padding: 12px 20px; }
+.wrap.collapsed #uploadView,
+.wrap.collapsed .footer-default { display: none !important; }
+.wrap.collapsed .footer-collapsed { display: block; }
 
-.collapse-btn.show {
-    display: flex;
-}
-
-.wrap.collapsed .collapse-btn {
-    display: none;
-}
-
-h1 {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0 0 8px;
-}
-
-p {
-    color: var(--muted);
-    margin: 0 0 24px;
-}
-
-.folder-btn {
-    width: 100%;
-    padding: 16px 20px;
-    background: var(--bg);
-    color: var(--text);
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    font-size: 15px;
-    cursor: pointer;
-    transition: all .2s;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 14px;
-    margin-bottom: 12px;
-    font-family: inherit;
-    text-align: left;
-}
-
-.folder-btn-primary {
-    background: var(--brand);
-    color: #fff;
-    border-color: var(--brand);
-}
-
-.folder-btn-primary:hover {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(37,99,235,.3);
-}
-
-.folder-btn-secondary:hover {
-    background: var(--border);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,.05);
-}
-
-.btn-title {
-    font-weight: 600;
-    font-size: 15px;
-    margin-bottom: 2px;
-}
-
-.btn-subtitle {
-    font-size: 13px;
-    opacity: 0.8;
-    font-weight: normal;
-}
-
-.library-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-}
-
-.library-header-left {
-    text-align: left;
-    min-width: 0;
-    flex: 1;
-}
-
-.library-header h1 {
-    margin: 0;
-}
-
-.current-folder {
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.footer-default {
+    margin-top: 20px;
     font-size: 13px;
     color: var(--muted);
-    margin-top: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.current-folder svg {
-    width: 12px;
-    height: 12px;
-    vertical-align: -1px;
-    margin-right: 4px;
-    opacity: 0.7;
-}
-
-.library-header-actions {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-}
-
-.header-divider {
-    color: var(--muted);
-    font-size: 12px;
-    opacity: 0.5;
-}
-
-.link-btn {
-    background: none;
-    border: none;
-    color: var(--brand);
-    font-size: 14px;
-    cursor: pointer;
-    padding: 6px 12px;
-    border-radius: 6px;
-    transition: all .2s;
-    font-family: inherit;
-}
-
-.link-btn:hover {
-    background: rgba(37,99,235,.1);
-}
-
-.link-btn.danger {
-    color: #ef4444;
-}
-
-.link-btn.danger:hover {
-    background: rgba(239,68,68,.1);
-}
-
-.divider {
     text-align: center;
-    color: var(--muted);
-    font-size: 13px;
-    margin: 20px 0;
-    position: relative;
 }
+.footer-default a { color: var(--muted); text-decoration: none; transition: color .2s; }
+.footer-default a:hover { color: var(--text); }
 
-.divider::before,
-.divider::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    width: 40%;
-    height: 1px;
-    background: var(--border);
-}
-
-.divider::before {
-    left: 0;
-}
-
-.divider::after {
-    right: 0;
-}
-
-#recentComics {
-    margin: 20px 0;
-}
-
-#recentComics h3,
-#allComics h3 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0 0 12px;
-    color: var(--text);
-}
-
-#allComics {
-    margin: 20px 0;
-}
-
-#allComicsList {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.settings-panel {
-    margin: 16px 0 20px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--bg);
-    text-align: left;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.settings-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 14px;
-    color: var(--text);
-}
-
-.settings-row label {
-    font-weight: 600;
-}
-
-.settings-toggle {
-    justify-content: flex-start;
-    gap: 8px;
-    font-weight: 500;
-}
-
-.settings-select {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 6px 10px;
-    background: var(--card);
-    color: var(--text);
-    font-size: 13px;
-}
-
-.series-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.series-item {
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--bg);
-    overflow: hidden;
-}
-
-.series-header {
-    width: 100%;
-    border: none;
-    background: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    cursor: pointer;
-    text-align: left;
-}
-
-.series-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-.series-meta {
-    font-size: 12px;
-    color: var(--muted);
-}
-
-.series-toggle {
-    font-size: 14px;
-    color: var(--muted);
-    transition: transform .2s ease;
-}
-
-.series-item.expanded .series-toggle {
-    transform: rotate(180deg);
-}
-
-.series-chapters {
+.footer-collapsed {
     display: none;
-    border-top: 1px solid var(--border);
-}
-
-.series-item.expanded .series-chapters {
-    display: block;
-}
-
-.series-chapter {
-    padding: 8px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    cursor: pointer;
-}
-
-.series-chapter:hover {
-    background: rgba(0,0,0,.03);
-}
-
-.series-chapter-title {
-    font-size: 13px;
-    color: var(--text);
-}
-
-.series-chapter-meta {
-    font-size: 12px;
-    color: var(--muted);
-}
-
-#recentComicsList {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.progress-bar {
-    height: 6px;
-    background: var(--border);
-    border-radius: 999px;
-    overflow: hidden;
-    margin-top: 6px;
-}
-
-.progress-bar-fill {
-    height: 100%;
-    background: var(--brand);
-    width: 0%;
-}
-
-.recent-comic-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all .2s;
-}
-
-.recent-comic-item:hover {
-    background: var(--border);
-    transform: translateX(4px);
-}
-
-.recent-comic-icon {
-    width: 50px;
-    height: 70px;
-    background: var(--brand);
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.recent-comic-icon svg {
-    width: 20px;
-    height: 20px;
-    fill: #fff;
-}
-
-.recent-comic-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.recent-comic-name {
     font-size: 14px;
-    font-weight: 500;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 2px;
-}
-
-.recent-comic-meta {
-    font-size: 12px;
     color: var(--muted);
+    cursor: pointer;
+    padding: 4px 0;
+    text-align: center;
+    transition: color .2s;
 }
+.footer-collapsed:hover { color: var(--text); }
+.footer-collapsed::before { content: '▼ '; font-size: 10px; margin-right: 4px; }
 
-/* Hosted Library */
-#hostedAllComicsList {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-#hostedRecentComicsList {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-#hostedRecentComics {
-    margin: 20px 0;
-}
-
-#hostedRecentComics h3,
-#hostedAllComics h3 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0 0 12px;
-    color: var(--text);
-}
-
-#hostedAllComics {
-    margin: 20px 0;
-}
-
+/* ── Dropzone ───────────────────────────────────────────────────────────── */
 #dropzone {
     border: 2px dashed var(--border) !important;
     border-radius: 14px;
-    padding: 36px 20px;
     background: transparent !important;
-    transition: .2s;
+    padding: 36px 20px;
+    min-height: 200px;
     display: flex !important;
     align-items: center;
     justify-content: center;
-    min-height: 180px;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
 }
-
 #dropzone.dz-drag-hover {
     border-color: var(--brand) !important;
     background: rgba(37,99,235,.06) !important;
 }
-
 .dz-message {
-    font-size: 16px;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
     margin: 0 !important;
-    display: block !important;
-    color: var(--text);
-    text-align: center;
-}
-
-.hint {
-    font-size: 14px;
-    color: var(--muted);
-    margin-top: 6px;
-    display: block;
-}
-
-footer {
-    margin-top: 20px;
-    text-align: center;
-    color: var(--muted);
-    font-size: 13px;
-}
-
-footer a {
-    color: var(--muted);
-    text-decoration: none;
-    transition: color .2s;
-}
-
-footer a:hover {
-    color: var(--text);
-}
-
-.footer-collapsed {
-    display: none;
-    text-align: center;
-    color: var(--muted);
-    font-size: 14px;
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 8px;
-    transition: all .2s;
-}
-
-.footer-collapsed:hover {
-    color: var(--text);
-    background: rgba(0,0,0,.03);
-}
-
-@media (prefers-color-scheme: dark) {
-    .footer-collapsed:hover {
-        background: rgba(255,255,255,.05);
-    }
-}
-
-.footer-collapsed::before {
-    content: '▼ ';
-    font-size: 10px;
-    margin-right: 4px;
-}
-
-.wrap.collapsed {
-    padding: 16px 26px;
-}
-
-.wrap.collapsed #initialView,
-.wrap.collapsed #libraryView,
-.wrap.collapsed #quickReadView,
-.wrap.collapsed .footer-default {
-    display: none !important;
-}
-
-.wrap.collapsed .footer-collapsed {
-    display: block;
-}
-
-.se-pre-con {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 9999;
-    background: rgba(0,0,0,.7);
-    backdrop-filter: blur(8px);
-    display: none !important;
-}
-
-.se-pre-con[style*="display: block"] {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-}
-
-@media (prefers-color-scheme: dark) {
-    .se-pre-con {
-        background: rgba(0,0,0,.8);
-    }
-}
-
-.spinner {
-    width: 60px;
-    height: 60px;
-    border: 5px solid rgba(255,255,255,.2);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-.progress-text {
-    font-size: 20px;
-    color: #fff;
-    text-align: center;
-    margin-top: 24px;
-    font-weight: 600;
-    text-shadow: 0 2px 4px rgba(0,0,0,.3);
-}
-
-#output {
-    width: 80%;
-    max-width: 1200px;
-    margin: 20px auto;
-    padding: 20px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    box-shadow: 0 10px 30px rgba(0,0,0,.05);
-    display: none;
-    overflow-x: hidden;
-}
-
-.imgUrl {
-    float: center;
-    height: 200px;
-    padding: 5px;
-}
-
-.imgUrl:hover {
-    -webkit-transform: scale(1.1);
-    transform: scale(1.1);
-}
-
-#output a.last-read {
-    position: relative;
-    display: inline-block;
-}
-
-#output a.last-read::before {
-    content: 'Last read';
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #fff;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.3);
-    z-index: 10;
-}
-
-#output a.last-read .imgUrl {
-    box-shadow: 0 0 0 3px var(--brand),
-                0 8px 24px rgba(37,99,235,.3);
-    border-radius: 2px;
-}
-
-@media (prefers-color-scheme: dark) {
-    #output a.last-read .imgUrl {
-        box-shadow: 0 0 0 3px var(--brand),
-                    0 8px 24px rgba(37,99,235,.5);
-    }
-}
-
-.dropzone .dz-preview {
-    display: none !important;
-}
-
-.dz-progress {
-    display: none;
-}
-
-@media only screen and (max-width: 768px) {
-    .imgUrl {
-        height: 120px;
-        padding: 5px;
-    }
-
-    #output {
-        width: 90%;
-        padding: 15px;
-    }
-
-    body {
-        padding: 20px 0;
-    }
-}
-
-.reader-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-}
-
-.reader-toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.toolbar-label {
-    font-size: 11px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-}
-
-.mode-toggle {
-    display: inline-flex;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.mode-btn {
-    background: var(--bg);
-    border: none;
-    color: var(--text);
-    padding: 6px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: background .2s, color .2s;
-}
-
-.mode-btn.active {
-    background: var(--brand);
-    color: #fff;
-}
-
-.reader-btn {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 6px 10px;
-    font-size: 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background .2s, transform .2s;
-}
-
-.reader-btn:hover:not(:disabled) {
-    background: var(--border);
-    transform: translateY(-1px);
-}
-
-.reader-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.page-indicator {
-    min-width: 70px;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-.zoom-level {
-    min-width: 48px;
-    text-align: center;
-    font-size: 12px;
-    color: var(--muted);
-}
-
-.smart-gap-toggle {
-    font-size: 12px;
-    color: var(--muted);
-    gap: 6px;
-}
-
-.smart-gap-toggle input {
-    accent-color: var(--brand);
-}
-
-.reader-meta {
-    font-size: 13px;
-    color: var(--muted);
-    text-align: left;
-    margin-bottom: 16px;
-}
-
-.paged-container {
-    text-align: center;
-}
-
-.paged-image-link {
-    display: block;
-    text-decoration: none;
-}
-
-.paged-image {
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    border-radius: 8px;
-    box-shadow: 0 6px 16px rgba(0,0,0,.08);
-}
-
-.lightbox-links {
-    display: none;
-}
-
-.scroll-container {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-}
-
-.scroll-page {
-    display: flex;
-    justify-content: center;
-    margin: 0 auto 16px;
-    padding: 0 12px;
-}
-
-.scroll-page--tight {
-    margin-bottom: 6px;
-}
-
-.scroll-page img {
-    width: var(--scroll-image-width, 90vw);
-    max-width: 100%;
-    height: auto;
-    display: block;
-    margin: 0 auto;
-}
-
-#output.scroll-mode {
-    width: 100%;
-    max-width: none;
-    padding: 12px 0 24px;
-}
-
-#output.scroll-mode .reader-toolbar,
-#output.scroll-mode .reader-meta {
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-    padding: 0 20px;
-}
-
-#output.scroll-mode .scroll-container {
-    gap: 0;
-    padding: 0;
-    line-height: 0;
-}
-
-#output.scroll-mode .scroll-page {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    line-height: 0;
-}
-
-#output.scroll-mode .scroll-page--tight {
-    margin-bottom: 0;
-}
-
-.webtoon-dock {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    border-top: 1px solid var(--border);
-    background: rgba(255,255,255,.92);
-    backdrop-filter: blur(6px);
-    box-shadow: 0 -6px 20px rgba(0,0,0,.12);
-    transition: height 150ms ease, transform 150ms ease, opacity 150ms ease;
-    overflow: visible;
-}
-
-@media (prefers-color-scheme: dark) {
-    .webtoon-dock {
-        background: rgba(18,20,24,.92);
-    }
-}
-
-.webtoon-dock.collapsed {
-    height: 20px;
-}
-
-.webtoon-dock.expanded {
-    height: auto;
-}
-
-.webtoon-dock.auto-hidden {
-    transform: translateY(100%);
-    opacity: 0;
-    pointer-events: none;
-}
-
-.webtoon-dock-handle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 12px;
-    min-height: 20px;
-    gap: 12px;
-}
-
-.webtoon-dock.collapsed .webtoon-dock-handle {
-    justify-content: center;
-}
-
-.dock-page-indicator {
-    font-size: 12px;
-    color: var(--muted);
-    font-weight: 600;
-}
-
-.dock-chapter-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--card);
-    color: var(--text);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background .2s;
-}
-
-.dock-chapter-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.dock-toggle-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--card);
-    color: var(--text);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 150ms ease, background .2s;
-    margin: -12px 0;
-}
-
-.dock-toggle-btn:hover {
-    background: var(--bg);
-}
-
-.dock-toggle-icon {
-    transition: transform 150ms ease;
-}
-
-.webtoon-dock.collapsed .dock-toggle-icon {
-    transform: rotate(180deg);
-}
-
-.webtoon-dock-content {
-    width: 100%;
-    padding: 8px 16px 12px;
-}
-
-.webtoon-dock.expanded .dock-chapter-btn {
-    display: none;
-}
-
-.next-chapter-float {
-    position: fixed;
-    right: 16px;
-    bottom: calc(var(--dock-safe-offset, 0px) + 12px);
-    z-index: 1001;
-    padding: 10px 16px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--card);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-    box-shadow: 0 8px 20px rgba(0,0,0,.18);
-    cursor: pointer;
-}
-
-.webtoon-dock-content .reader-toolbar {
-    margin: 0;
-}
-
-.webtoon-dock.collapsed .webtoon-dock-content {
-    display: none;
-}
-
-@media only screen and (max-width: 768px) {
-    .reader-toolbar {
-        gap: 10px;
-    }
-
-    .reader-toolbar-group {
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    .mode-toggle {
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    .mode-btn {
-        flex: 1;
-        text-align: center;
-    }
-
-    .page-indicator {
-        min-width: 60px;
-    }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   ADDITIONS v2.1.0–v2.2.0 (on top of DHLKeyuser fork CSS)
-   ═══════════════════════════════════════════════════════════════════════════
-
-   [FIX v2.1.0] float: center — invalid CSS removed from .imgUrl.
-                #output is now a flex container for the paged/scroll modes.
-                (DHLKeyuser fork restructured #output; imgUrl float was removed
-                 already in fork, but appended here as an explicit reset guard.)
-
-   [FEAT v2.0.0] Drag-drop zone enhancements: icon, labels, drag-hover state.
-   [FEAT v2.0.0] .file-size-warning — amber banner for files > 100 MB.
-   [FEAT v2.0.0] .chunk-progress / .chunk-bar — streaming progress bar.
-   [FEAT v2.2.0] #browserNotice — browser limitation notice (moved from inline HTML).
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ── [FIX] Ensure float:center never slips back in ──────────────────────── */
-.imgUrl { float: none; }
-
-/* ── Browser notice ─────────────────────────────────────────────────────── */
-#browserNotice {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 20px;
-    font-size: 14px;
-    color: var(--muted);
-    text-align: left;
-}
-#browserNotice strong { color: var(--text); }
-
-/* ── Drag-drop zone enhancements ────────────────────────────────────────── */
-.dz-message {
-    display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
     pointer-events: none;
 }
 .dz-upload-icon {
@@ -1089,6 +153,9 @@ footer a:hover {
 #dropzone.dz-drag-hover .dz-upload-icon { color: var(--brand); }
 .dz-main-text { font-size: 16px; font-weight: 600; color: var(--text); }
 .dz-sub-text  { font-size: 14px; color: var(--muted); }
+.hint         { font-size: 13px; color: var(--muted); }
+.dropzone .dz-preview { display: none !important; }
+.dz-progress          { display: none; }
 
 /* ── Large-file warning banner ──────────────────────────────────────────── */
 .file-size-warning {
@@ -1104,28 +171,303 @@ footer a:hover {
     .file-size-warning { background: #422006; color: #fcd34d; border-color: #78350f; }
 }
 
-/* ── Chunked-read progress bar (large-file loading indicator) ───────────── */
-.chunk-progress {
-    margin-top: 24px;
-    width: 260px;
-    text-align: center;
+/* ── Loading overlay ────────────────────────────────────────────────────── */
+.se-pre-con {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,.75);
+    backdrop-filter: blur(8px);
+    display: none !important;
 }
+.se-pre-con[style*="display: block"] {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.spinner {
+    width: 60px; height: 60px;
+    border: 5px solid rgba(255,255,255,.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.progress-text {
+    font-size: 20px; font-weight: 600;
+    color: #fff;
+    margin-top: 24px;
+    text-shadow: 0 2px 4px rgba(0,0,0,.3);
+}
+
+/* ── Chunk progress bar ─────────────────────────────────────────────────── */
+.chunk-progress { margin-top: 24px; width: 260px; text-align: center; }
 .chunk-bar-wrap {
-    width: 100%;
-    height: 6px;
+    width: 100%; height: 6px;
     background: rgba(255,255,255,.2);
-    border-radius: 3px;
-    overflow: hidden;
+    border-radius: 3px; overflow: hidden;
 }
 .chunk-bar {
-    height: 100%;
-    width: 0;
+    height: 100%; width: 0;
     background: #4ade80;
     border-radius: 3px;
     transition: width .15s ease;
 }
-.chunk-label {
-    margin-top: 8px;
+.chunk-label { margin-top: 8px; font-size: 13px; color: rgba(255,255,255,.7); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   READER — output area
+   [FIX] No float:center — output uses flexbox (paged mode centres the image;
+         scroll mode stacks pages vertically via .scroll-container)
+══════════════════════════════════════════════════════════════════════════ */
+#output {
+    width: 90%;
+    max-width: 1200px;
+    margin: 0 auto 40px;
+    padding: 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.05);
+    display: none;
+}
+
+/* Scroll mode: full-width, no card padding */
+#output.scroll-mode {
+    width: 100%;
+    max-width: none;
+    padding: 12px 0 24px;
+    border: none;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+}
+#output.scroll-mode .reader-toolbar,
+#output.scroll-mode .reader-meta {
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 20px;
+}
+
+/* ── Reader meta line ───────────────────────────────────────────────────── */
+.reader-meta {
     font-size: 13px;
-    color: rgba(255,255,255,.7);
+    color: var(--muted);
+    margin-bottom: 14px;
+    text-align: left;
+}
+
+/* ── Reader toolbar ─────────────────────────────────────────────────────── */
+.reader-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.reader-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.toolbar-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+}
+
+/* Mode toggle */
+.mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.mode-btn {
+    background: var(--bg);
+    border: none;
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .2s, color .2s;
+    font-family: inherit;
+}
+.mode-btn.active { background: var(--brand); color: #fff; }
+
+/* Reader buttons */
+.reader-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .2s, transform .15s;
+}
+.reader-btn:hover:not(:disabled) {
+    background: var(--border);
+    transform: translateY(-1px);
+}
+.reader-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+.page-indicator {
+    min-width: 64px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.zoom-level {
+    min-width: 44px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+}
+.smart-gap-toggle {
+    font-size: 12px;
+    color: var(--muted);
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+.smart-gap-toggle input { accent-color: var(--brand); }
+
+/* ── Paged mode ─────────────────────────────────────────────────────────── */
+.paged-container { text-align: center; }
+.paged-image-link { display: block; text-decoration: none; }
+.paged-image {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.08);
+}
+.lightbox-links { display: none; }
+
+/* ── Scroll / Webtoon mode ──────────────────────────────────────────────── */
+.scroll-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+}
+.scroll-page {
+    display: flex;
+    justify-content: center;
+    margin: 0 auto 16px;
+    padding: 0 12px;
+    line-height: 0;
+}
+.scroll-page--tight { margin-bottom: 6px; }
+
+.scroll-page img {
+    width: var(--scroll-image-width, 90vw);
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+#output.scroll-mode .scroll-container {
+    gap: 0;
+    padding: 0;
+    line-height: 0;
+}
+#output.scroll-mode .scroll-page {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    line-height: 0;
+}
+#output.scroll-mode .scroll-page--tight { margin-bottom: 0; }
+
+/* ── Webtoon dock ───────────────────────────────────────────────────────── */
+.webtoon-dock {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 -6px 20px rgba(0,0,0,.12);
+    transition: transform .15s ease, opacity .15s ease;
+    overflow: visible;
+}
+@media (prefers-color-scheme: dark) {
+    .webtoon-dock { background: rgba(18,20,24,.92); }
+}
+
+.webtoon-dock.collapsed  { height: 44px; }
+.webtoon-dock.expanded   { height: auto; }
+.webtoon-dock.auto-hidden {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.webtoon-dock-handle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 16px;
+    min-height: 44px;
+    gap: 12px;
+}
+.webtoon-dock.collapsed .webtoon-dock-handle { justify-content: center; }
+
+.dock-page-indicator {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.dock-toggle-btn {
+    width: 44px; height: 44px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s;
+    margin: -10px 0;
+}
+.dock-toggle-btn:hover { background: var(--bg); }
+
+.dock-toggle-icon { transition: transform .15s ease; }
+.webtoon-dock.collapsed .dock-toggle-icon { transform: rotate(180deg); }
+
+.webtoon-dock-content {
+    width: 100%;
+    padding: 8px 16px 12px;
+}
+.webtoon-dock.collapsed .webtoon-dock-content { display: none; }
+.webtoon-dock-content .reader-toolbar { margin: 0; }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media only screen and (max-width: 768px) {
+    body  { padding: 16px 0; }
+    #output { width: 100%; padding: 12px; border-radius: 0; border-left: none; border-right: none; }
+
+    .reader-toolbar { gap: 10px; }
+    .reader-toolbar-group {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .mode-toggle { width: 100%; }
+    .mode-btn    { flex: 1; text-align: center; }
+    .page-indicator { min-width: 54px; }
 }
