@@ -3,67 +3,88 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Web Comic Reader – read CBR, CBZ and CBT files entirely in your browser. No uploads, no server required." />
+    <meta name="description" content="Web Comic Reader – read CBR, CBZ and CBT files in your browser. Nothing is uploaded." />
     <title>Web Comic Reader</title>
 
     <!--
-      CHANGELOG (index.html)
-      ──────────────────────────────────────────────────────────────
-      v2.0.0
-      • [SECURITY] Upgraded all CDN URLs to pinned, versioned releases with
-        Subresource Integrity (SRI) sha384 hashes to prevent supply-chain attacks.
-      • [SECURITY] Replaced lightgallery.js v1.4 (unmaintained, XSS vectors)
-        with lightgallery v2.7.2 (actively maintained).
-      • [SECURITY] Pinned dropzone to exact version 6.0.0 (was floating `unpkg.com/dropzone`).
-      • [SECURITY] Added Content-Security-Policy meta tag as defence-in-depth
-        alongside the server-side _headers file.
-      • [DEPS]   jszip upgraded from bundled 2.x to CDN 3.10.1 (path-traversal fix).
-      • [FEATURE] Added drag-and-drop UX enhancements: upload icon, clear label,
-        click-to-browse trigger, large-file warning banner (>100 MB).
-      • [DEPLOY] Added <link rel="manifest"> for Cloudflare Pages PWA support.
-      • [A11Y]   role/aria-label attributes on loading overlay and output region.
+      CHANGELOG (index.html) — v2.2.0
+      ──────────────────────────────────────────────────────────────────────
+      Source: DHLKeyuser/Web-Comic-Reader @ cursor/-bc-44021c6b-c202-4236-b537-cf4f28d6e683-cd26
+      Diff base: afzafri/Web-Comic-Reader@master
+
+      [MERGE] Ported reader toolbar from DHLKeyuser fork:
+              #readerToolbar — paged/scroll mode toggle, prev/next page,
+              chapter navigation, restart, zoom controls, smart-gap toggle.
+      [MERGE] Ported #pagedContainer (single full-width image + lightbox link)
+      [MERGE] Ported #scrollContainer (webtoon / continuous scroll)
+      [MERGE] Ported #webtoonDock — fixed bottom dock with page indicator,
+              chapter nav and collapse toggle; auto-hides on scroll-down.
+      [MERGE] Ported #nextChapterFloat — floating "Next Chapter →" button.
+      [MERGE] Settings panel (default mode, auto-advance, reset progress)
+              added to library header.
+      [OMIT]  Hosted library (#hostedLibraryView, hosted-library.js,
+              generate-library.sh) intentionally omitted — requires a
+              server-side manifest and will not be stored in this fork.
+
+      [FIX]   frame-ancestors removed from <meta> CSP (browser-ignored).
+      [FIX]   Dropzone vendored locally (CDN MIME/CORS failure).
+      [FIX]   'unsafe-eval' removed from CSP (not needed with JSZip 3.x).
+      [FEAT]  Drag-drop zone icon, labels, large-file warning, chunk bar.
     -->
 
-    <!-- Content Security Policy (defence-in-depth) -->
     <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval'; style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" />
+          content="default-src 'self';
+                   script-src 'self' https://cdn.jsdelivr.net;
+                   style-src  'self' https://cdn.jsdelivr.net 'unsafe-inline';
+                   font-src   'self' https://cdn.jsdelivr.net;
+                   img-src    'self' blob: data:;
+                   connect-src 'self';
+                   base-uri   'self';
+                   form-action 'self'" />
 
     <meta name="theme-color" content="#2563eb" />
 
-    <!-- lightgallery v2.7.2 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/css/lightgallery-bundle.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/css/lightgallery-bundle.min.css"
+          crossorigin="anonymous" />
+    <link rel="stylesheet" href="./assets/js/vendor/dropzone.min.css" />
+    <link rel="stylesheet" href="./assets/css/styles.css" />
 
-    <!-- dropzone 6.0.0 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dropzone@6.0.0/dist/dropzone.css" crossorigin="anonymous" />
-
-    <link href="./assets/css/styles.css" rel="stylesheet" />
+    <noscript><p style="text-align:center;padding:40px">JavaScript is required.</p></noscript>
 </head>
 <body>
+
+    <!-- Loading overlay -->
     <div class="se-pre-con" role="status" aria-live="polite" aria-label="Loading comic">
         <div class="spinner"></div>
         <div class="progress-text">Reading 0/0 pages</div>
-        <div class="chunk-progress" id="chunkProgress" style="display:none;">
+        <div class="chunk-progress" id="chunkProgress" style="display:none">
             <div class="chunk-bar-wrap"><div class="chunk-bar" id="chunkBar"></div></div>
-            <div class="chunk-label" id="chunkLabel">Streaming large file…</div>
+            <div class="chunk-label" id="chunkLabel">Loading…</div>
         </div>
     </div>
 
+    <!-- Upload / library panel -->
     <div class="wrap">
-        <button class="collapse-btn" id="collapseBtn" aria-label="Minimize uploader">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <button class="collapse-btn" id="collapseBtn" aria-label="Minimise panel">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                 <line x1="2" y1="7" x2="12" y2="7"/>
             </svg>
         </button>
 
+        <!-- Initial / home view -->
         <div id="initialView">
             <h1>Your Comic Library</h1>
             <p>Choose how you want to read your comics</p>
 
-            <div id="browserNotice" style="display:none; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 14px; color: var(--muted); text-align: left;">
-                <strong style="color: var(--text);">ℹ️ Browser Limitation:</strong> Your browser doesn't support library features. Library mode requires Chrome, Edge, or Opera on desktop. You can still use Quick Read mode to upload and read comics.
+            <div id="browserNotice" style="display:none">
+                <strong>ℹ️ Browser Limitation:</strong>
+                Library mode requires Chrome, Edge, or Opera on desktop.
+                You can still use Quick Read mode to read comics.
             </div>
 
-            <button id="selectFolderBtn" class="folder-btn folder-btn-primary" style="display:none;">
+            <button id="selectFolderBtn" class="folder-btn folder-btn-primary" style="display:none" aria-label="Select comics folder">
                 <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                     <path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/>
                 </svg>
@@ -73,11 +94,11 @@
                 </div>
             </button>
 
-            <div id="dividerOr" class="divider" style="display:none;">or</div>
+            <div id="dividerOr" class="divider" style="display:none">or</div>
 
-            <button id="quickReadBtn" class="folder-btn folder-btn-secondary">
+            <button id="quickReadBtn" class="folder-btn folder-btn-secondary" aria-label="Quick Read — open a single file">
                 <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                    <path d="M8.5 1.5A1.5 1.5 0 0 0 7 0h-1a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 6 16h1a1.5 1.5 0 0 0 1.5-1.5v-13zM11.5 3.5A1.5 1.5 0 0 0 10 2H9a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 9 16h1a1.5 1.5 0 0 0 1.5-1.5v-11zm3-2A1.5 1.5 0 0 0 13 0h-1a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 12 16h1a1.5 1.5 0 0 0 1.5-1.5v-13z"/>
+                    <path d="M8.5 1.5A1.5 1.5 0 007 0H6a1.5 1.5 0 00-1.5 1.5v13A1.5 1.5 0 006 16h1a1.5 1.5 0 001.5-1.5v-13zm3 2A1.5 1.5 0 0010 2H9a1.5 1.5 0 00-1.5 1.5v11A1.5 1.5 0 009 16h1a1.5 1.5 0 001.5-1.5v-11zm3-2A1.5 1.5 0 0013 0h-1a1.5 1.5 0 00-1.5 1.5v13A1.5 1.5 0 0012 16h1a1.5 1.5 0 001.5-1.5v-13z"/>
                 </svg>
                 <div>
                     <div class="btn-title">Quick Read</div>
@@ -86,50 +107,69 @@
             </button>
         </div>
 
-        <div id="libraryView" style="display:none;">
+        <!-- Library view -->
+        <div id="libraryView" style="display:none">
             <div class="library-header">
                 <div class="library-header-left">
                     <h1>Your Comic Library</h1>
                     <div id="currentFolderName" class="current-folder"></div>
                 </div>
                 <div class="library-header-actions">
-                    <button id="changeFolderBtn" class="link-btn">Change folder</button>
-                    <span class="header-divider">•</span>
-                    <button id="toggleUploadBtn" class="link-btn">Quick read</button>
+                    <button id="changeFolderBtn"   class="link-btn">Change folder</button>
+                    <span class="header-divider" aria-hidden="true">•</span>
+                    <button id="toggleUploadBtn"   class="link-btn">Quick read</button>
+                    <span class="header-divider" aria-hidden="true">•</span>
+                    <button id="settingsToggleBtn" class="link-btn">Settings</button>
                 </div>
             </div>
 
-            <div id="recentComics" style="display:none;">
+            <!-- [MERGE DHLKeyuser] Settings panel -->
+            <div id="settingsPanel" class="settings-panel" style="display:none">
+                <div class="settings-row">
+                    <label for="defaultModeSelect">Default reading mode</label>
+                    <select id="defaultModeSelect" class="settings-select">
+                        <option value="scroll">Webtoon / Scroll</option>
+                        <option value="paged">Paged</option>
+                    </select>
+                </div>
+                <label class="settings-row settings-toggle">
+                    <input type="checkbox" id="autoAdvanceToggle">
+                    <span>Auto-advance at end (Webtoon)</span>
+                </label>
+                <button id="resetProgressBtn" class="link-btn danger">Reset all progress</button>
+            </div>
+
+            <div id="recentComics" style="display:none">
                 <h3>Recently Read</h3>
                 <div id="recentComicsList"></div>
             </div>
 
-            <div id="allComics" style="display:none;">
+            <div id="allComics" style="display:none">
                 <h3>All Comics</h3>
                 <div id="allComicsList"></div>
             </div>
         </div>
 
-        <div id="quickReadView" style="display:none;">
+        <!-- Quick Read / drag-drop view -->
+        <div id="quickReadView" style="display:none">
             <div class="library-header">
                 <h1>Quick Read</h1>
-                <button id="backToLibraryBtn" class="link-btn" style="display:none;">Back to library</button>
+                <button id="backToLibraryBtn" class="link-btn" style="display:none">← Library</button>
             </div>
 
-            <!-- Drag-and-drop zone; Dropzone handles both drag-drop AND click-to-open -->
-            <form id="dropzone" class="dropzone" aria-label="Drop comic files here or click to select">
-                <div class="dz-message">
-                    <svg class="dz-upload-icon" width="40" height="40" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" aria-hidden="true">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <form id="dropzone" class="dropzone" aria-label="Drop a comic file here or click to browse">
+                <div class="dz-message" data-dz-message>
+                    <svg class="dz-upload-icon" width="40" height="40" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="1.5"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                         <polyline points="17 8 12 3 7 8"/>
                         <line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
                     <span class="dz-main-text">Drag &amp; drop your comic here</span>
-                    <span class="dz-sub-text">or click anywhere to browse files</span>
+                    <span class="dz-sub-text">or click to browse files</span>
                     <span class="hint">.cbr · .cbz · .cbt &nbsp;|&nbsp; up to 1 GB</span>
-                    <div id="fileSizeWarning" class="file-size-warning" style="display:none;">
+                    <div id="fileSizeWarning" class="file-size-warning" style="display:none">
                         ⚠️ Large file detected — loading may take a moment…
                     </div>
                 </div>
@@ -137,38 +177,113 @@
         </div>
 
         <footer class="footer-default">
-            Afif Zafri 2017 &ndash; <span id="currYear"></span>
-            <a href="https://github.com/afzafri/Web-Comic-Reader" target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-left: 6px;" aria-hidden="true">
-                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            Afif Zafri 2017 – <span id="currYear"></span>
+            <a href="https://github.com/afzafri/Web-Comic-Reader"
+               target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"
+                     style="vertical-align:middle;margin-left:6px" aria-hidden="true">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                             0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                             -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+                             .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+                             -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27
+                             .68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
+                             .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
+                             0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
                 </svg>
             </a>
         </footer>
         <div class="footer-collapsed" id="footerCollapsedText">Show library</div>
     </div>
 
-    <div id="output" role="main" aria-label="Comic pages"></div>
+    <!-- ── Comic output area ──────────────────────────────────────────────
+         Structure ported from DHLKeyuser fork (cursor branch).
+         The original <div id="output"></div> is replaced by a richer
+         structure supporting paged, scroll, lightbox and webtoon dock.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <div id="output">
 
-    <!-- Local archive format adapters -->
+        <!-- [MERGE DHLKeyuser] Reader toolbar: mode toggle, page nav, chapter nav, zoom, smart gap -->
+        <div id="readerToolbar" class="reader-toolbar" style="display:none">
+            <div class="reader-toolbar-group mode-group">
+                <span class="toolbar-label">Reading Mode</span>
+                <div class="mode-toggle" role="group" aria-label="Reading mode">
+                    <button type="button" class="mode-btn" data-reading-mode="paged"  aria-pressed="false">Paged</button>
+                    <button type="button" class="mode-btn" data-reading-mode="scroll" aria-pressed="false">Webtoon / Scroll</button>
+                </div>
+            </div>
+            <div class="reader-toolbar-group nav-group">
+                <button type="button" id="prevPageBtn" class="reader-btn" aria-label="Previous page">Prev</button>
+                <div id="pageIndicator" class="page-indicator">0 / 0</div>
+                <button type="button" id="nextPageBtn" class="reader-btn" aria-label="Next page">Next</button>
+            </div>
+            <div class="reader-toolbar-group chapter-group">
+                <button type="button" id="prevChapterBtn" class="reader-btn" aria-label="Previous chapter">⬅ Prev Chapter</button>
+                <button type="button" id="nextChapterBtn" class="reader-btn" aria-label="Next chapter">Next Chapter ➡</button>
+            </div>
+            <div class="reader-toolbar-group restart-group">
+                <button type="button" id="restartChapterBtn" class="reader-btn" aria-label="Restart chapter">Restart</button>
+            </div>
+            <div class="reader-toolbar-group zoom-group">
+                <button type="button" id="zoomOutBtn" class="reader-btn" aria-label="Zoom out">−</button>
+                <span id="zoomLevel" class="zoom-level">100%</span>
+                <button type="button" id="zoomInBtn"  class="reader-btn" aria-label="Zoom in">+</button>
+            </div>
+            <label class="reader-toolbar-group smart-gap-toggle">
+                <input type="checkbox" id="smartGapToggle">
+                <span>Smart gap removal</span>
+            </label>
+        </div>
+
+        <!-- Archive title / hint -->
+        <div id="readerMeta" class="reader-meta"></div>
+
+        <!-- [MERGE DHLKeyuser] Paged mode: single full-width image -->
+        <div id="pagedContainer" class="paged-container">
+            <a id="pagedImageLink" class="paged-image-link" href="#" aria-label="Open page in gallery">
+                <img id="pagedImage" class="paged-image" alt="" />
+            </a>
+            <!-- Hidden anchor pool for lightGallery -->
+            <div id="lightboxLinks" class="lightbox-links" aria-hidden="true"></div>
+        </div>
+
+        <!-- [MERGE DHLKeyuser] Scroll / Webtoon mode: continuous vertical strip -->
+        <div id="scrollContainer" class="scroll-container" style="display:none"></div>
+
+        <!-- [MERGE DHLKeyuser] Webtoon dock: fixed bottom bar with page counter + chapter nav -->
+        <div id="webtoonDock" class="webtoon-dock collapsed" style="display:none">
+            <div class="webtoon-dock-handle">
+                <button type="button" id="dockPrevChapterBtn" class="dock-chapter-btn" aria-label="Previous chapter">◀</button>
+                <div id="dockPageIndicator" class="dock-page-indicator">0 / 0</div>
+                <button type="button" id="dockNextChapterBtn" class="dock-chapter-btn" aria-label="Next chapter">▶</button>
+                <button type="button" id="dockToggleBtn" class="dock-toggle-btn"
+                        aria-label="Toggle Webtoon dock" aria-expanded="false">
+                    <svg class="dock-toggle-icon" width="20" height="20" viewBox="0 0 20 20"
+                         fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="6 12 10 8 14 12"></polyline>
+                    </svg>
+                </button>
+            </div>
+            <div id="webtoonDockContent" class="webtoon-dock-content"></div>
+        </div>
+
+        <!-- [MERGE DHLKeyuser] Floating "Next Chapter →" button (scroll mode, near chapter end) -->
+        <button type="button" id="nextChapterFloat" class="next-chapter-float" style="display:none">
+            Next Chapter →
+        </button>
+    </div>
+
+    <!-- Scripts -->
     <script src="./assets/js/uncompress/uncompress.js"></script>
-
-    <!--
-      jszip 3.10.1 — replaces bundled jszip 2.x
-      Security: 3.x validates entry names to prevent path-traversal (CVE-style).
-    -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" crossorigin="anonymous"></script>
-
-    <!-- lightgallery v2.7.2 bundle + plugins (replaces unmaintained 1.4.0) -->
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/lightgallery.umd.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/zoom/lg-zoom.umd.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/fullscreen/lg-fullscreen.umd.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/thumbnail/lg-thumbnail.umd.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/autoplay/lg-autoplay.umd.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/rotate/lg-rotate.umd.min.js" crossorigin="anonymous"></script>
-
-    <!-- dropzone 6.0.0 — pinned (was floating unpkg.com/dropzone) -->
-    <script src="https://cdn.jsdelivr.net/npm/dropzone@6.0.0/dist/dropzone-min.js" crossorigin="anonymous"></script>
-
+    <script src="./assets/js/vendor/dropzone.min.js"></script>
     <script src="./assets/js/script.js"></script>
 </body>
 </html>

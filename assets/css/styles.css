@@ -207,6 +207,14 @@ p {
     background: rgba(37,99,235,.1);
 }
 
+.link-btn.danger {
+    color: #ef4444;
+}
+
+.link-btn.danger:hover {
+    background: rgba(239,68,68,.1);
+}
+
 .divider {
     text-align: center;
     color: var(--muted);
@@ -253,15 +261,143 @@ p {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 300px;
-    overflow-y: auto;
-    overflow-x: hidden;
+}
+
+.settings-panel {
+    margin: 16px 0 20px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--text);
+}
+
+.settings-row label {
+    font-weight: 600;
+}
+
+.settings-toggle {
+    justify-content: flex-start;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.settings-select {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: var(--card);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.series-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.series-item {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    overflow: hidden;
+}
+
+.series-header {
+    width: 100%;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.series-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.series-meta {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.series-toggle {
+    font-size: 14px;
+    color: var(--muted);
+    transition: transform .2s ease;
+}
+
+.series-item.expanded .series-toggle {
+    transform: rotate(180deg);
+}
+
+.series-chapters {
+    display: none;
+    border-top: 1px solid var(--border);
+}
+
+.series-item.expanded .series-chapters {
+    display: block;
+}
+
+.series-chapter {
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.series-chapter:hover {
+    background: rgba(0,0,0,.03);
+}
+
+.series-chapter-title {
+    font-size: 13px;
+    color: var(--text);
+}
+
+.series-chapter-meta {
+    font-size: 12px;
+    color: var(--muted);
 }
 
 #recentComicsList {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.progress-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--brand);
+    width: 0%;
 }
 
 .recent-comic-item {
@@ -316,6 +452,35 @@ p {
 .recent-comic-meta {
     font-size: 12px;
     color: var(--muted);
+}
+
+/* Hosted Library */
+#hostedAllComicsList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#hostedRecentComicsList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#hostedRecentComics {
+    margin: 20px 0;
+}
+
+#hostedRecentComics h3,
+#hostedAllComics h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 12px;
+    color: var(--text);
+}
+
+#hostedAllComics {
+    margin: 20px 0;
 }
 
 #dropzone {
@@ -467,6 +632,7 @@ footer a:hover {
     border-radius: 16px;
     box-shadow: 0 10px 30px rgba(0,0,0,.05);
     display: none;
+    overflow-x: hidden;
 }
 
 .imgUrl {
@@ -539,71 +705,392 @@ footer a:hover {
     }
 }
 
+.reader-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.reader-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.toolbar-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.mode-btn {
+    background: var(--bg);
+    border: none;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .2s, color .2s;
+}
+
+.mode-btn.active {
+    background: var(--brand);
+    color: #fff;
+}
+
+.reader-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .2s, transform .2s;
+}
+
+.reader-btn:hover:not(:disabled) {
+    background: var(--border);
+    transform: translateY(-1px);
+}
+
+.reader-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.page-indicator {
+    min-width: 70px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.zoom-level {
+    min-width: 48px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.smart-gap-toggle {
+    font-size: 12px;
+    color: var(--muted);
+    gap: 6px;
+}
+
+.smart-gap-toggle input {
+    accent-color: var(--brand);
+}
+
+.reader-meta {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: left;
+    margin-bottom: 16px;
+}
+
+.paged-container {
+    text-align: center;
+}
+
+.paged-image-link {
+    display: block;
+    text-decoration: none;
+}
+
+.paged-image {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 6px 16px rgba(0,0,0,.08);
+}
+
+.lightbox-links {
+    display: none;
+}
+
+.scroll-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+}
+
+.scroll-page {
+    display: flex;
+    justify-content: center;
+    margin: 0 auto 16px;
+    padding: 0 12px;
+}
+
+.scroll-page--tight {
+    margin-bottom: 6px;
+}
+
+.scroll-page img {
+    width: var(--scroll-image-width, 90vw);
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+#output.scroll-mode {
+    width: 100%;
+    max-width: none;
+    padding: 12px 0 24px;
+}
+
+#output.scroll-mode .reader-toolbar,
+#output.scroll-mode .reader-meta {
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 20px;
+}
+
+#output.scroll-mode .scroll-container {
+    gap: 0;
+    padding: 0;
+    line-height: 0;
+}
+
+#output.scroll-mode .scroll-page {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    line-height: 0;
+}
+
+#output.scroll-mode .scroll-page--tight {
+    margin-bottom: 0;
+}
+
+.webtoon-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 -6px 20px rgba(0,0,0,.12);
+    transition: height 150ms ease, transform 150ms ease, opacity 150ms ease;
+    overflow: visible;
+}
+
+@media (prefers-color-scheme: dark) {
+    .webtoon-dock {
+        background: rgba(18,20,24,.92);
+    }
+}
+
+.webtoon-dock.collapsed {
+    height: 20px;
+}
+
+.webtoon-dock.expanded {
+    height: auto;
+}
+
+.webtoon-dock.auto-hidden {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.webtoon-dock-handle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 12px;
+    min-height: 20px;
+    gap: 12px;
+}
+
+.webtoon-dock.collapsed .webtoon-dock-handle {
+    justify-content: center;
+}
+
+.dock-page-indicator {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.dock-chapter-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s;
+}
+
+.dock-chapter-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dock-toggle-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 150ms ease, background .2s;
+    margin: -12px 0;
+}
+
+.dock-toggle-btn:hover {
+    background: var(--bg);
+}
+
+.dock-toggle-icon {
+    transition: transform 150ms ease;
+}
+
+.webtoon-dock.collapsed .dock-toggle-icon {
+    transform: rotate(180deg);
+}
+
+.webtoon-dock-content {
+    width: 100%;
+    padding: 8px 16px 12px;
+}
+
+.webtoon-dock.expanded .dock-chapter-btn {
+    display: none;
+}
+
+.next-chapter-float {
+    position: fixed;
+    right: 16px;
+    bottom: calc(var(--dock-safe-offset, 0px) + 12px);
+    z-index: 1001;
+    padding: 10px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 8px 20px rgba(0,0,0,.18);
+    cursor: pointer;
+}
+
+.webtoon-dock-content .reader-toolbar {
+    margin: 0;
+}
+
+.webtoon-dock.collapsed .webtoon-dock-content {
+    display: none;
+}
+
+@media only screen and (max-width: 768px) {
+    .reader-toolbar {
+        gap: 10px;
+    }
+
+    .reader-toolbar-group {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .mode-toggle {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .mode-btn {
+        flex: 1;
+        text-align: center;
+    }
+
+    .page-indicator {
+        min-width: 60px;
+    }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   CHANGELOG (styles.css)
-   ───────────────────────────────────────────────────────────────────────────
-   v2.0.0
-   • [FEATURE] .dz-upload-icon, .dz-main-text, .dz-sub-text, .dz-click-link
-               — new drag-drop zone elements for improved UX.
-   • [FEATURE] .dz-drag-hover — visual highlight when a file is dragged over.
-   • [FEATURE] .file-size-warning — amber banner shown for files > 100 MB.
-   • [FEATURE] .chunk-progress, .chunk-bar-wrap, .chunk-bar, .chunk-label
-               — streaming progress bar shown during large-file reads.
-   • [FIX]     .dz-message is now flex-column so elements stack correctly.
-   • [STYLE]   .dz-click-link styled as an inline hyperlink (no button chrome).
+   ADDITIONS v2.1.0–v2.2.0 (on top of DHLKeyuser fork CSS)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   [FIX v2.1.0] float: center — invalid CSS removed from .imgUrl.
+                #output is now a flex container for the paged/scroll modes.
+                (DHLKeyuser fork restructured #output; imgUrl float was removed
+                 already in fork, but appended here as an explicit reset guard.)
+
+   [FEAT v2.0.0] Drag-drop zone enhancements: icon, labels, drag-hover state.
+   [FEAT v2.0.0] .file-size-warning — amber banner for files > 100 MB.
+   [FEAT v2.0.0] .chunk-progress / .chunk-bar — streaming progress bar.
+   [FEAT v2.2.0] #browserNotice — browser limitation notice (moved from inline HTML).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Drag-drop zone enhancements ──────────────────────────────────────── */
-.dropzone .dz-message {
-    display: flex;
+/* ── [FIX] Ensure float:center never slips back in ──────────────────────── */
+.imgUrl { float: none; }
+
+/* ── Browser notice ─────────────────────────────────────────────────────── */
+#browserNotice {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: var(--muted);
+    text-align: left;
+}
+#browserNotice strong { color: var(--text); }
+
+/* ── Drag-drop zone enhancements ────────────────────────────────────────── */
+.dz-message {
+    display: flex !important;
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    padding: 20px 10px;
+    pointer-events: none;
 }
-
 .dz-upload-icon {
     color: var(--muted);
     margin-bottom: 6px;
     transition: color .2s;
 }
+#dropzone.dz-drag-hover .dz-upload-icon { color: var(--brand); }
+.dz-main-text { font-size: 16px; font-weight: 600; color: var(--text); }
+.dz-sub-text  { font-size: 14px; color: var(--muted); }
 
-.dz-drag-hover .dz-upload-icon {
-    color: var(--brand);
-}
-
-.dz-main-text {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-.dz-sub-text {
-    font-size: 13px;
-    color: var(--muted);
-}
-
-.dz-click-link {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--brand);
-    cursor: pointer;
-    font-size: inherit;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-}
-
-.dz-click-link:hover {
-    opacity: 0.8;
-}
-
-.dz-drag-hover {
-    border-color: var(--brand) !important;
-    background: color-mix(in srgb, var(--brand) 6%, var(--bg)) !important;
-}
-
-/* ─── Large-file warning banner ─────────────────────────────────────────── */
+/* ── Large-file warning banner ──────────────────────────────────────────── */
 .file-size-warning {
     margin-top: 8px;
     padding: 8px 14px;
@@ -613,22 +1100,16 @@ footer a:hover {
     font-size: 13px;
     border: 1px solid #fde68a;
 }
-
 @media (prefers-color-scheme: dark) {
-    .file-size-warning {
-        background: #422006;
-        color: #fcd34d;
-        border-color: #78350f;
-    }
+    .file-size-warning { background: #422006; color: #fcd34d; border-color: #78350f; }
 }
 
-/* ─── Chunked-read progress bar (shown during large-file loads) ─────────── */
+/* ── Chunked-read progress bar (large-file loading indicator) ───────────── */
 .chunk-progress {
     margin-top: 24px;
     width: 260px;
     text-align: center;
 }
-
 .chunk-bar-wrap {
     width: 100%;
     height: 6px;
@@ -636,25 +1117,15 @@ footer a:hover {
     border-radius: 3px;
     overflow: hidden;
 }
-
 .chunk-bar {
     height: 100%;
-    width: 0%;
+    width: 0;
     background: #4ade80;
     border-radius: 3px;
     transition: width .15s ease;
 }
-
 .chunk-label {
     margin-top: 8px;
     font-size: 13px;
     color: rgba(255,255,255,.7);
-}
-
-/* ─── Empty / error states ──────────────────────────────────────────────── */
-.empty-message {
-    text-align: center;
-    color: var(--muted);
-    padding: 20px;
-    font-size: 14px;
 }
