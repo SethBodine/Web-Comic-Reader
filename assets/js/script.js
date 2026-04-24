@@ -1,58 +1,45 @@
 /**
- * Web Comic Reader — script.js  v2.2.0
+ * Web Comic Reader — script.js  v2.2.3
  *
  * CHANGELOG
  * ─────────────────────────────────────────────────────────────────────────
- * Scope: drag-drop / click-to-open → read. No local library, no folder
- * picker, no IndexedDB, no series view, no settings panel, no localStorage
- * beyond remembering the last reading mode and zoom level.
+ * [FIX v2.2.3] Toolbar/dock redesigned to match DHLKeyuser live site
+ *   (https://dhlkeyuser.github.io/Web-Comic-Reader/):
+ *   • #webtoonDock is a FIXED bottom bar containing the full toolbar.
+ *   • The dock handle shows ONLY the page counter + collapse chevron.
+ *   • The toolbar (mode/nav/zoom/smart-gap) is in #webtoonDockContent
+ *     which is EXPANDED by default — always visible when a comic is open.
+ *   • Removed auto-hide-on-scroll — the dock no longer disappears when
+ *     the user scrolls down. Users explicitly collapse/expand via chevron.
+ *   • Paged mode: dock is shown with zoom/smart-gap disabled; mode buttons
+ *     still accessible. Toolbar does NOT move out of the dock.
+ *   • Scroll mode: same dock, zoom/smart-gap enabled.
+ *   • No DOM movement of #readerToolbar between modes — it stays inside
+ *     #webtoonDockContent at all times once a comic is open.
  *
- * Reader engine features ported from:
- *   DHLKeyuser/Web-Comic-Reader @ cursor/-bc-44021c6b-c202-4236-b537-cf4f28d6e683-cd26
+ * [FIX v2.2.2] Document-level dragover/drop preventDefault in Dropzone
+ * [FIX v2.2.1] archiveOpenFile ZIP Promise handled in uncompress.js
+ * [FIX v2.2.1] Cache-buster ?v=2.2.3 on all local assets
  *
- * [DHL] Paged mode — single full-width image, Prev/Next, lightbox on click
- * [DHL] Webtoon/Scroll mode — continuous vertical strip
- * [DHL] Mode toggle persisted to localStorage (key: readerMode)
- * [DHL] Scroll zoom +/− (10–200%), persisted (key: scrollZoom)
- * [DHL] Smart gap removal — canvas pixel-sampling trims white page borders
- * [DHL] IntersectionObserver lazy-load (800px margin) in scroll mode
- * [DHL] IntersectionObserver visibility tracking → live page indicator
- * [DHL] Webtoon dock — fixed bottom bar, collapse/expand, auto-hide on
- *       scroll-down, tap centre of strip to show/hide
- * [DHL] Keyboard navigation ← →
- * [DHL] naturalCompare() — chunk-based numeric sort
- * [DHL] Restart button — jump back to page 1
+ * Reader engine features from DHLKeyuser cursor branch:
+ *   Paged mode · Webtoon/Scroll mode · Scroll zoom · Smart gap removal ·
+ *   IntersectionObserver lazy-load · Keyboard nav · naturalCompare
  *
- * Security additions (our work, not in DHLKeyuser fork):
- * [SEC] validateFile() — extension allowlist + 1 GB size cap
- * [SEC] All filenames displayed via textContent only (no innerHTML with
- *       user-controlled strings)
- * [SEC] Blob URLs tracked and revoked immediately after image loads
- * [SEC] Dropzone.autoDiscover = false set unconditionally before init
- *
- * Large-file additions (our work):
- * [LRG] readFileChunked() — 64 MiB slices for files > 100 MB
- * [LRG] Byte-level progress bar driven by onProgress callback
- * [LRG] archiveOpenArrayBuffer Promise path handled for ZIP vs sync RAR/TAR
- *
- * Bug fixes (our work):
- * [FIX] lightGallery 2.x API — window.lightGallery(), plugins array,
- *       lgAfterSlide event name (was onAfterSlide in v1)
- * [FIX] float:center invalid CSS removed; output uses flexbox
- * [FIX] AVIF + TIFF added to MIME table
+ * Security / large-file (our additions):
+ *   validateFile · readFileChunked · revokeAllBlobs · textContent-only XSS guard
  * ─────────────────────────────────────────────────────────────────────────
  */
 'use strict';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
-const MAX_FILE_BYTES        = 1 * 1024 * 1024 * 1024;  // 1 GB hard cap
-const LARGE_FILE_THRESHOLD  = 100 * 1024 * 1024;        // 100 MB → chunked path
-const CHUNK_SIZE            = 64 * 1024 * 1024;         // 64 MiB per chunk
+const MAX_FILE_BYTES        = 1 * 1024 * 1024 * 1024;
+const LARGE_FILE_THRESHOLD  = 100 * 1024 * 1024;
+const CHUNK_SIZE            = 64 * 1024 * 1024;
 const ALLOWED_EXT           = new Set(['.cbr', '.cbz', '.cbt']);
 const READER_MODE_KEY       = 'readerMode';
 const SCROLL_ZOOM_KEY       = 'scrollZoom';
 const SMART_GAP_KEY         = 'scrollSmartGap';
-const WEBTOON_DOCK_KEY      = 'webtoonDockCollapsed';
+const DOCK_COLLAPSED_KEY    = 'webtoonDockCollapsed';
 const SCROLL_ZOOM_MIN       = 0.1;
 const SCROLL_ZOOM_MAX       = 2.0;
 const BASE_SCROLL_WIDTH_VW  = 90;
@@ -60,15 +47,19 @@ const BASE_SCROLL_WIDTH_VW  = 90;
 /* ── Boot ──────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
 
-    /* DOM refs — reader */
+    /* ── DOM refs ─────────────────────────────────────────────────────── */
     const outputEl          = document.getElementById('output');
-    const readerToolbarEl   = document.getElementById('readerToolbar');
     const readerMetaEl      = document.getElementById('readerMeta');
     const pagedContainerEl  = document.getElementById('pagedContainer');
     const pagedImageLinkEl  = document.getElementById('pagedImageLink');
     const pagedImageEl      = document.getElementById('pagedImage');
     const lightboxLinksEl   = document.getElementById('lightboxLinks');
     const scrollContainerEl = document.getElementById('scrollContainer');
+    const webtoonDockEl     = document.getElementById('webtoonDock');
+    const dockContentEl     = document.getElementById('webtoonDockContent');
+    const dockToggleBtn     = document.getElementById('dockToggleBtn');
+    const dockPageIndicator = document.getElementById('dockPageIndicator');
+    const readerToolbarEl   = document.getElementById('readerToolbar');
     const pageIndicatorEl   = document.getElementById('pageIndicator');
     const prevPageBtn       = document.getElementById('prevPageBtn');
     const nextPageBtn       = document.getElementById('nextPageBtn');
@@ -77,13 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomLevelEl       = document.getElementById('zoomLevel');
     const smartGapToggleEl  = document.getElementById('smartGapToggle');
     const restartBtn        = document.getElementById('restartChapterBtn');
-    const webtoonDockEl     = document.getElementById('webtoonDock');
-    const dockToggleBtn     = document.getElementById('dockToggleBtn');
-    const dockPageIndicator = document.getElementById('dockPageIndicator');
-    const dockContentEl     = document.getElementById('webtoonDockContent');
     const modeButtons       = document.querySelectorAll('[data-reading-mode]');
 
-    /* DOM refs — upload panel */
     const wrapEl            = document.querySelector('.wrap');
     const collapseBtn       = document.getElementById('collapseBtn');
     const progressTextEl    = document.querySelector('.progress-text');
@@ -95,49 +81,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const footerCollapsedEl = document.getElementById('footerCollapsedText');
     const currYearEl        = document.getElementById('currYear');
 
-    /* Reader state */
+    /* ── State ────────────────────────────────────────────────────────── */
     let readingMode     = localStorage.getItem(READER_MODE_KEY) || 'scroll';
     if (readingMode !== 'scroll' && readingMode !== 'paged') readingMode = 'scroll';
 
     let scrollZoom      = parseFloat(localStorage.getItem(SCROLL_ZOOM_KEY)) || 1;
-    scrollZoom          = clamp(scrollZoom, SCROLL_ZOOM_MIN, SCROLL_ZOOM_MAX);
+    scrollZoom          = Math.min(SCROLL_ZOOM_MAX, Math.max(SCROLL_ZOOM_MIN, scrollZoom));
 
     let smartGapEnabled = localStorage.getItem(SMART_GAP_KEY) === 'true';
-    let dockCollapsed   = localStorage.getItem(WEBTOON_DOCK_KEY) !== 'false'; // default collapsed
+    let dockCollapsed   = localStorage.getItem(DOCK_COLLAPSED_KEY) === 'true'; // expanded by default
 
-    /* Page data */
-    let pageUrls          = [];
-    let totalPages        = 0;
-    let pagesLoaded       = 0;
-    let currentPageIndex  = 0;
-    let currentScrollIdx  = 0;
-    let scrollPageEls     = [];
-    let scrollEdgeData    = [];
-    let scrollModeReady   = false;
-    let visibilityRatios  = new Map();
-    let lazyObserver      = null;
-    let visObserver       = null;
-    let lgInstance        = null;
-    let currentFilename   = '';
+    let pageUrls        = [];
+    let totalPages      = 0;
+    let pagesLoaded     = 0;
+    let currentPageIdx  = 0;
+    let currentScrollIdx= 0;
+    let scrollPageEls   = [];
+    let scrollEdgeData  = [];
+    let scrollModeReady = false;
+    let visibilityMap   = new Map();
+    let lazyObserver    = null;
+    let visObserver     = null;
+    let lgInstance      = null;
+    let currentFilename = '';
+    let scrollSaveTimer = null;
+    const activeBlobURLs= new Set();
 
-    /* Blob URL tracking */
-    const activeBlobURLs  = new Set();
-
-    /* Dock auto-hide */
-    let dockAutoHidden    = false;
-    let lastScrollY       = window.scrollY;
-    let scrollSaveTimer   = null;
-
-    /* ── Year ─────────────────────────────────────────────────────────── */
+    /* ── Init ─────────────────────────────────────────────────────────── */
     currYearEl.textContent = new Date().getFullYear();
-
-    /* ── Archive decoders ─────────────────────────────────────────────── */
     loadArchiveFormats(['rar', 'zip', 'tar']);
 
-    /* ── Dropzone ─────────────────────────────────────────────────────── */
-    Dropzone.autoDiscover = false;  // [FIX] set unconditionally before new Dropzone()
+    if (smartGapToggleEl) smartGapToggleEl.checked = smartGapEnabled;
+    updateModeButtons();
+    applyScrollZoom();
+    updateZoomControls();
+    setDockCollapsed(dockCollapsed, false); // false = don't save to localStorage again on init
 
-    const dz = new Dropzone('#dropzone', {
+    /* ── Dropzone ─────────────────────────────────────────────────────── */
+    Dropzone.autoDiscover = false;
+
+    new Dropzone('#dropzone', {
         url: '#',
         acceptedFiles: '.cbr,.cbz,.cbt',
         createImageThumbnails: false,
@@ -150,23 +133,19 @@ document.addEventListener('DOMContentLoaded', () => {
             this.on('maxfilesexceeded', function (f) { this.removeAllFiles(); this.addFile(f); });
             this.on('addedfile', (file) => {
                 const err = validateFile(file);
-                if (err) { showError(err); dz.removeAllFiles(); return; }
-                fileSizeWarningEl.style.display = file.size > LARGE_FILE_THRESHOLD ? 'block' : 'none';
+                if (err) { showError(err); return; }
+                if (fileSizeWarningEl)
+                    fileSizeWarningEl.style.display = file.size > LARGE_FILE_THRESHOLD ? 'block' : 'none';
                 openComic(file);
             });
         }
     });
 
-    /* ── Collapse / expand upload panel ─────────────────────────────── */
-    footerCollapsedEl.addEventListener('click', () => {
-        wrapEl.classList.remove('collapsed');
-    });
-    collapseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        wrapEl.classList.add('collapsed');
-    });
+    /* ── Upload panel collapse ────────────────────────────────────────── */
+    footerCollapsedEl.addEventListener('click', () => wrapEl.classList.remove('collapsed'));
+    collapseBtn.addEventListener('click', (e) => { e.preventDefault(); wrapEl.classList.add('collapsed'); });
 
-    /* ── Reader controls ──────────────────────────────────────────────── */
+    /* ── Reader control events ────────────────────────────────────────── */
     modeButtons.forEach(btn =>
         btn.addEventListener('click', () => setReadingMode(btn.dataset.readingMode))
     );
@@ -176,96 +155,81 @@ document.addEventListener('DOMContentLoaded', () => {
     zoomInBtn?.addEventListener('click',   () => adjustScrollZoom(0.1));
     smartGapToggleEl?.addEventListener('change', () => {
         smartGapEnabled = smartGapToggleEl.checked;
-        localStorage.setItem(SMART_GAP_KEY, smartGapEnabled.toString());
+        localStorage.setItem(SMART_GAP_KEY, String(smartGapEnabled));
         applySmartGapState();
     });
     restartBtn?.addEventListener('click', restartComic);
     dockToggleBtn?.addEventListener('click', () => setDockCollapsed(!dockCollapsed));
-    document.addEventListener('keydown', handleKeydown);
-    window.addEventListener('scroll', handleWindowScroll, { passive: true });
-    window.addEventListener('resize', () => updateDockPadding(), { passive: true });
-    scrollContainerEl?.addEventListener('click', handleScrollTap);
+    pagedImageLinkEl?.addEventListener('click', (e) => {
+        if (!lightboxLinksEl?.children.length) return;
+        e.preventDefault();
+        lightboxLinksEl.children[currentPageIdx]?.click();
+    });
 
-    /* Initialise control states */
-    if (smartGapToggleEl) smartGapToggleEl.checked = smartGapEnabled;
-    updateModeButtons();
-    applyScrollZoom();
-    updateZoomControls();
+    document.addEventListener('keydown', handleKeydown);
+    window.addEventListener('resize', updateDockPadding, { passive: true });
 
     /* ══════════════════════════════════════════════════════════════════════
        OPEN COMIC
     ══════════════════════════════════════════════════════════════════════ */
     function openComic(file) {
-        /* UI */
         outputEl.style.display  = 'none';
         wrapEl.classList.add('collapsed');
         collapseBtn.classList.add('show');
         currentFilename = file.name;
+
         progressTextEl.textContent = 'Reading 0/0 pages';
         sePreConEl.style.display   = 'block';
-        if (readerToolbarEl) readerToolbarEl.style.display = 'none';
 
-        /* Reset */
         if (lgInstance) { lgInstance.destroy(true); lgInstance = null; }
         revokeAllBlobs();
         resetReader();
 
-        /* Chunk progress bar */
         chunkProgressEl.style.display = file.size > LARGE_FILE_THRESHOLD ? 'block' : 'none';
 
+        const onArchive = (archive, err) => {
+            chunkProgressEl.style.display = 'none';
+            if (err || !archive) { showError(String(err || 'Could not open archive.')); return; }
+            processArchive(archive);
+        };
+
         if (file.size <= LARGE_FILE_THRESHOLD) {
-            /* Fast path — archiveOpenFile (works for all formats, callback-based) */
-            archiveOpenFile(file, (archive, err) => {
-                chunkProgressEl.style.display = 'none';
-                if (err || !archive) { showError(String(err || 'Could not open archive.')); return; }
-                processArchive(archive);
-            });
+            archiveOpenFile(file, onArchive);
         } else {
-            /* Large-file path — chunked ArrayBuffer read */
             readFileChunked(file,
-                (arrayBuffer) => {
+                (buf) => {
                     chunkProgressEl.style.display = 'none';
                     try {
-                        const result = archiveOpenArrayBuffer(file.name, arrayBuffer);
-                        /* ZIP returns a Promise; RAR/TAR returns synchronously */
-                        if (result && typeof result.then === 'function') {
-                            result.then(processArchive).catch(e => showError(e.message || String(e)));
-                        } else {
-                            processArchive(result);
-                        }
-                    } catch (e) {
-                        showError(e.message || String(e));
-                    }
+                        const r = archiveOpenArrayBuffer(file.name, buf);
+                        (r && typeof r.then === 'function')
+                            ? r.then(a => onArchive(a, null)).catch(e => onArchive(null, e))
+                            : onArchive(r, null);
+                    } catch (e) { onArchive(null, e); }
                 },
-                (bytesRead, total) => {
-                    const pct = total > 0 ? Math.round((bytesRead / total) * 100) : 0;
+                (done, total) => {
+                    const pct = total ? Math.round(done / total * 100) : 0;
                     chunkBarEl.style.width = pct + '%';
-                    chunkLabelEl.textContent = `Loading ${fmtBytes(bytesRead)} / ${fmtBytes(total)} (${pct}%)`;
+                    chunkLabelEl.textContent = `Loading ${fmtBytes(done)} / ${fmtBytes(total)} (${pct}%)`;
                 }
             );
         }
     }
 
-    /* ── Chunked FileReader (large files > 100 MB) ────────────────────── */
     function readFileChunked(file, onComplete, onProgress) {
-        const chunks = [];
-        let offset = 0;
+        const chunks = []; let offset = 0;
         function next() {
-            const end    = Math.min(offset + CHUNK_SIZE, file.size);
+            const end = Math.min(offset + CHUNK_SIZE, file.size);
             const reader = new FileReader();
             reader.onload = () => {
                 chunks.push(reader.result);
                 offset = end;
                 onProgress(offset, file.size);
-                if (offset < file.size) {
-                    setTimeout(next, 0);  // yield between chunks
-                } else {
-                    const total    = chunks.reduce((a, c) => a + c.byteLength, 0);
-                    const combined = new Uint8Array(total);
-                    let pos = 0;
-                    for (const c of chunks) { combined.set(new Uint8Array(c), pos); pos += c.byteLength; }
-                    onComplete(combined.buffer);
-                }
+                if (offset < file.size) { setTimeout(next, 0); return; }
+                const total = chunks.reduce((a, c) => a + c.byteLength, 0);
+                const out = new Uint8Array(total);
+                let pos = 0;
+                for (const c of chunks) { out.set(new Uint8Array(c), pos); pos += c.byteLength; }
+                onComplete(out.buffer);
             };
             reader.onerror = () => showError('Failed to read file chunk.');
             reader.readAsArrayBuffer(file.slice(offset, end));
@@ -273,143 +237,139 @@ document.addEventListener('DOMContentLoaded', () => {
         next();
     }
 
-    /* ── Process opened archive ───────────────────────────────────────── */
     function processArchive(archive) {
         const entries = archive.entries
             .filter(e => e.is_file && getExt(e.name) !== '')
             .sort((a, b) => naturalCompare(a.name, b.name));
 
-        totalPages = entries.length;
-        if (totalPages === 0) { showError('No images found in this archive.'); return; }
+        totalPages  = entries.length;
+        if (!totalPages) { showError('No images found in this archive.'); return; }
 
-        pageUrls   = new Array(totalPages);
+        pageUrls    = new Array(totalPages);
         pagesLoaded = 0;
 
-        const promises = entries.map((entry, i) => readEntryBlob(entry, i));
-        Promise.all(promises).then(() => finaliseLoad(archive.file_name));
-    }
-
-    function readEntryBlob(entry, index) {
-        return new Promise(resolve => {
+        Promise.all(entries.map((entry, i) => new Promise(resolve => {
             entry.readData((data, err) => {
-                if (err || !data) { resolve(); return; }
-                const blob = new Blob([data], { type: getMIME(entry.name) });
-                const url  = URL.createObjectURL(blob);
-                activeBlobURLs.add(url);
-                pageUrls[index] = url;
+                if (!err && data) {
+                    const url = URL.createObjectURL(new Blob([data], { type: getMIME(entry.name) }));
+                    activeBlobURLs.add(url);
+                    pageUrls[i] = url;
+                }
                 pagesLoaded++;
                 progressTextEl.textContent = `Reading ${pagesLoaded}/${totalPages} pages`;
                 resolve();
             });
-        });
+        }))).then(() => finaliseLoad(archive.file_name));
     }
 
-    /* ── Finalise load ────────────────────────────────────────────────── */
     function finaliseLoad(archiveName) {
         progressTextEl.innerHTML = '<span style="color:#4ade80">Completed!</span>';
         sePreConEl.style.display = 'none';
         outputEl.style.display   = 'block';
-        if (readerToolbarEl) readerToolbarEl.style.display = 'flex';
 
-        /* Set archive name in meta bar — textContent only [SEC] */
         if (readerMetaEl) {
             readerMetaEl.textContent = archiveName
-                ? `${archiveName} — click a page to open gallery`
+                ? archiveName + ' — click a page to open gallery'
                 : 'Click a page to open gallery';
         }
 
         buildLightboxLinks();
         initGallery();
 
-        currentPageIndex = 0;
+        currentPageIdx  = 0;
         currentScrollIdx = 0;
+
+        /* Show the dock now that a comic is loaded */
+        webtoonDockEl.style.display = 'flex';
+        setDockCollapsed(dockCollapsed, false);
+        requestAnimationFrame(updateDockPadding);
+
         applyReadingMode(true);
         updatePageIndicator();
     }
 
     /* ══════════════════════════════════════════════════════════════════════
        READING MODES
+       [FIX v2.2.3] Toolbar stays inside dock at all times — no DOM movement.
+       Mode switch only toggles which containers are visible and enables/
+       disables zoom + smart-gap controls.
     ══════════════════════════════════════════════════════════════════════ */
     function setReadingMode(mode) {
         if (mode !== 'paged' && mode !== 'scroll') return;
-        if (readingMode === mode) return;
         readingMode = mode;
         localStorage.setItem(READER_MODE_KEY, mode);
         applyReadingMode(true);
     }
 
-    function applyReadingMode(shouldJump) {
+    function applyReadingMode(jump) {
         updateModeButtons();
+        updateZoomControls();
+
         if (readingMode === 'scroll') {
             outputEl.classList.add('scroll-mode');
-            if (pagedContainerEl)  pagedContainerEl.style.display  = 'none';
-            if (scrollContainerEl) scrollContainerEl.style.display = 'block';
-            if (smartGapToggleEl)  smartGapToggleEl.disabled = false;
-            lastScrollY = window.scrollY;
-            activateWebtoonDock();
-            renderScrollMode(shouldJump);
+            pagedContainerEl.style.display  = 'none';
+            scrollContainerEl.style.display = 'block';
+            if (smartGapToggleEl) smartGapToggleEl.disabled = false;
+            renderScrollMode(jump);
         } else {
             outputEl.classList.remove('scroll-mode');
-            if (scrollContainerEl) scrollContainerEl.style.display = 'none';
-            if (pagedContainerEl)  pagedContainerEl.style.display  = 'block';
-            if (smartGapToggleEl)  smartGapToggleEl.disabled = true;
-            deactivateWebtoonDock();
+            scrollContainerEl.style.display = 'none';
+            pagedContainerEl.style.display  = 'block';
+            if (smartGapToggleEl) smartGapToggleEl.disabled = true;
             clearScrollObservers();
-            renderPagedImage(currentPageIndex);
+            renderPagedImage(currentPageIdx);
         }
-        updateZoomControls();
     }
 
     function updateModeButtons() {
         modeButtons.forEach(btn => {
             const active = btn.dataset.readingMode === readingMode;
             btn.classList.toggle('active', active);
-            btn.setAttribute('aria-pressed', active.toString());
+            btn.setAttribute('aria-pressed', String(active));
         });
     }
 
     /* ── Paged mode ───────────────────────────────────────────────────── */
     function renderPagedImage(index) {
-        if (!pagedImageEl || totalPages === 0) return;
+        if (!totalPages) return;
         const i = clamp(index, 0, totalPages - 1);
-        currentPageIndex = i;
+        currentPageIdx  = i;
         currentScrollIdx = i;
-        pagedImageEl.src = pageUrls[i];
+        pagedImageEl.src = pageUrls[i] || '';
         pagedImageEl.alt = `Page ${i + 1}`;
-        if (pagedImageLinkEl) pagedImageLinkEl.href = pageUrls[i];
+        if (pagedImageLinkEl) pagedImageLinkEl.href = pageUrls[i] || '#';
         updatePageIndicator();
     }
 
     /* ── Scroll / Webtoon mode ────────────────────────────────────────── */
-    function renderScrollMode(shouldJump) {
+    function renderScrollMode(jump) {
         if (!scrollModeReady) buildScrollPages();
         applyScrollZoom();
         initLazyObserver();
         initScrollObserver();
-        if (shouldJump) scrollToPageIndex(currentScrollIdx, false);
+        if (jump) scrollToPage(currentScrollIdx, false);
     }
 
     function buildScrollPages() {
-        if (!scrollContainerEl) return;
         scrollContainerEl.innerHTML = '';
         scrollPageEls   = [];
         scrollEdgeData  = [];
 
         pageUrls.forEach((url, i) => {
-            const wrapper = document.createElement('div');
-            wrapper.className    = 'scroll-page';
-            wrapper.dataset.index = String(i);
+            const wrap = document.createElement('div');
+            wrap.className      = 'scroll-page';
+            wrap.dataset.index  = String(i);
 
             const img       = document.createElement('img');
+            img.dataset.src = url;
+            img.alt         = `Page ${i + 1}`;
             img.loading     = 'lazy';
             img.decoding    = 'async';
-            img.alt         = `Page ${i + 1}`;
-            img.dataset.src = url;
             img.addEventListener('load', () => analyzeWhitespace(img, i));
 
-            wrapper.appendChild(img);
-            scrollContainerEl.appendChild(wrapper);
-            scrollPageEls.push(wrapper);
+            wrap.appendChild(img);
+            scrollContainerEl.appendChild(wrap);
+            scrollPageEls.push(wrap);
         });
 
         scrollModeReady = true;
@@ -418,51 +378,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ── Lazy loading ─────────────────────────────────────────────────── */
     function initLazyObserver() {
-        if (!scrollContainerEl) return;
         if (lazyObserver) lazyObserver.disconnect();
-
         const imgs = scrollContainerEl.querySelectorAll('img[data-src]');
-        if (!('IntersectionObserver' in window)) {
-            imgs.forEach(setImgSrc);
-            return;
-        }
+        if (!('IntersectionObserver' in window)) { imgs.forEach(setImgSrc); return; }
         lazyObserver = new IntersectionObserver(entries => {
-            entries.forEach(e => {
-                if (!e.isIntersecting) return;
-                setImgSrc(e.target);
-                lazyObserver.unobserve(e.target);
-            });
+            entries.forEach(e => { if (e.isIntersecting) { setImgSrc(e.target); lazyObserver.unobserve(e.target); } });
         }, { rootMargin: '800px 0px' });
         imgs.forEach(img => lazyObserver.observe(img));
     }
 
     function setImgSrc(img) {
         const src = img.getAttribute('data-src');
-        if (!src) return;
-        img.src = src;
-        img.removeAttribute('data-src');
+        if (src) { img.src = src; img.removeAttribute('data-src'); }
     }
 
     /* ── Visibility tracking → page indicator ─────────────────────────── */
     function initScrollObserver() {
-        if (!scrollContainerEl || !scrollPageEls.length) return;
         if (visObserver) visObserver.disconnect();
-        visibilityRatios = new Map();
-
+        visibilityMap = new Map();
         if (!('IntersectionObserver' in window)) return;
         visObserver = new IntersectionObserver(entries => {
-            entries.forEach(e => {
-                visibilityRatios.set(Number(e.target.dataset.index), e.intersectionRatio);
-            });
-            let bestIdx = currentScrollIdx, bestRatio = 0;
-            visibilityRatios.forEach((ratio, idx) => {
-                if (ratio > bestRatio) { bestRatio = ratio; bestIdx = idx; }
-            });
-            if (bestIdx !== currentScrollIdx) {
-                currentScrollIdx = bestIdx;
-                currentPageIndex = bestIdx;
+            entries.forEach(e => visibilityMap.set(Number(e.target.dataset.index), e.intersectionRatio));
+            let best = currentScrollIdx, bestR = 0;
+            visibilityMap.forEach((r, idx) => { if (r > bestR) { bestR = r; best = idx; } });
+            if (best !== currentScrollIdx) {
+                currentScrollIdx = best;
+                currentPageIdx   = best;
                 updatePageIndicator();
-                scheduleSaveScroll(bestIdx);
+                if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
+                scrollSaveTimer = setTimeout(() => {
+                    localStorage.setItem('lastPage_' + currentFilename, String(best));
+                }, 300);
             }
         }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
         scrollPageEls.forEach(p => visObserver.observe(p));
@@ -471,13 +417,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearScrollObservers() {
         if (lazyObserver) { lazyObserver.disconnect(); lazyObserver = null; }
         if (visObserver)  { visObserver.disconnect();  visObserver  = null; }
-    }
-
-    function scheduleSaveScroll(idx) {
-        if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
-        scrollSaveTimer = setTimeout(() => {
-            localStorage.setItem('lastScrollPage_' + currentFilename, String(idx));
-        }, 200);
     }
 
     /* ── Zoom ─────────────────────────────────────────────────────────── */
@@ -490,13 +429,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!scrollContainerEl) return;
         const w = Math.min(BASE_SCROLL_WIDTH_VW * scrollZoom, 100);
         scrollContainerEl.style.setProperty('--scroll-image-width', `${w}vw`);
-        localStorage.setItem(SCROLL_ZOOM_KEY, scrollZoom.toString());
-        updateZoomControls();
+        localStorage.setItem(SCROLL_ZOOM_KEY, String(scrollZoom));
+        if (zoomLevelEl) zoomLevelEl.textContent = `${Math.round(scrollZoom * 100)}%`;
     }
 
     function updateZoomControls() {
-        if (zoomLevelEl) zoomLevelEl.textContent = `${Math.round(scrollZoom * 100)}%`;
         const isScroll = readingMode === 'scroll';
+        if (zoomLevelEl) zoomLevelEl.textContent = `${Math.round(scrollZoom * 100)}%`;
         if (zoomOutBtn) zoomOutBtn.disabled = !isScroll;
         if (zoomInBtn)  zoomInBtn.disabled  = !isScroll;
     }
@@ -504,188 +443,125 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ── Smart gap removal ────────────────────────────────────────────── */
     function analyzeWhitespace(img, index) {
         if (!img.naturalWidth || !img.naturalHeight) return;
-        const stripH  = Math.min(20, img.naturalHeight);
-        const sampleH = Math.min(10, stripH);
-        const sampleW = Math.min(120, img.naturalWidth);
-        const canvas  = document.createElement('canvas');
-        canvas.width  = sampleW;
-        canvas.height = sampleH;
+        const sW = Math.min(120, img.naturalWidth);
+        const sH = 10;
+        const stripH = Math.min(20, img.naturalHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = sW; canvas.height = sH;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) return;
-
-        const topWhite    = isStripWhite(ctx, img, 0, stripH, sampleW, sampleH);
-        const bottomWhite = isStripWhite(ctx, img, img.naturalHeight - stripH, stripH, sampleW, sampleH);
-        scrollEdgeData[index] = { topWhite, bottomWhite };
+        scrollEdgeData[index] = {
+            topWhite:    sampleWhite(ctx, img, 0,                         stripH, sW, sH),
+            bottomWhite: sampleWhite(ctx, img, img.naturalHeight - stripH, stripH, sW, sH)
+        };
         updateSmartGapAt(index);
     }
 
-    function isStripWhite(ctx, img, startY, stripH, sampleW, sampleH) {
-        ctx.clearRect(0, 0, sampleW, sampleH);
-        ctx.drawImage(img, 0, startY, img.naturalWidth, stripH, 0, 0, sampleW, sampleH);
-        const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
-        const total = data.length / 4;
+    function sampleWhite(ctx, img, sy, sh, sw, sampleH) {
+        ctx.clearRect(0, 0, sw, sampleH);
+        ctx.drawImage(img, 0, sy, img.naturalWidth, sh, 0, 0, sw, sampleH);
+        const d = ctx.getImageData(0, 0, sw, sampleH).data;
         let white = 0;
-        for (let i = 0; i < data.length; i += 4) {
-            if (data[i] > 240 && data[i+1] > 240 && data[i+2] > 240) white++;
-        }
-        return white / total > 0.92;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 240 && d[i+1] > 240 && d[i+2] > 240) white++;
+        return white / (d.length / 4) > 0.92;
     }
 
-    function updateSmartGapAt(index) {
+    function updateSmartGapAt(i) {
         if (!smartGapEnabled) return;
-        const prev = index - 1;
-        if (prev >= 0 && scrollEdgeData[prev] && scrollEdgeData[index]) {
-            toggleTightGap(prev, scrollEdgeData[prev].bottomWhite && scrollEdgeData[index].topWhite);
-        }
-        const next = index + 1;
-        if (next < totalPages && scrollEdgeData[index] && scrollEdgeData[next]) {
-            toggleTightGap(index, scrollEdgeData[index].bottomWhite && scrollEdgeData[next].topWhite);
-        }
+        const curr = scrollEdgeData[i], prev = scrollEdgeData[i - 1], next = scrollEdgeData[i + 1];
+        if (prev && curr)  toggleTight(i - 1, prev.bottomWhite && curr.topWhite);
+        if (curr && next)  toggleTight(i,     curr.bottomWhite && next.topWhite);
     }
 
     function applySmartGapState() {
-        if (!scrollPageEls.length) return;
-        scrollPageEls.forEach((page, i) => {
-            const curr = scrollEdgeData[i];
-            const next = scrollEdgeData[i + 1];
-            toggleTightGap(i, !!(smartGapEnabled && curr && next && curr.bottomWhite && next.topWhite));
+        scrollPageEls.forEach((_, i) => {
+            const curr = scrollEdgeData[i], next = scrollEdgeData[i + 1];
+            toggleTight(i, !!(smartGapEnabled && curr && next && curr.bottomWhite && next.topWhite));
         });
     }
 
-    function toggleTightGap(index, tight) {
-        scrollPageEls[index]?.classList.toggle('scroll-page--tight', tight);
+    function toggleTight(i, tight) {
+        scrollPageEls[i]?.classList.toggle('scroll-page--tight', tight);
     }
 
-    /* ── Webtoon dock ─────────────────────────────────────────────────── */
-    function activateWebtoonDock() {
-        if (!webtoonDockEl || !dockContentEl || !readerToolbarEl) return;
-        webtoonDockEl.style.display = 'flex';
-        dockContentEl.appendChild(readerToolbarEl);
-        readerToolbarEl.style.display = 'flex';
-        updateDockState();
-        setDockAutoHidden(false);
-        requestAnimationFrame(updateDockPadding);
-    }
-
-    function deactivateWebtoonDock() {
-        if (webtoonDockEl) {
-            webtoonDockEl.style.display = 'none';
-            webtoonDockEl.classList.remove('auto-hidden');
-        }
-        /* Return toolbar to #output */
-        if (readerToolbarEl && outputEl) {
-            outputEl.insertBefore(readerToolbarEl, outputEl.firstChild);
-            readerToolbarEl.style.display = 'flex';
-        }
-        if (scrollContainerEl) scrollContainerEl.style.paddingBottom = '';
-    }
-
-    function setDockCollapsed(collapsed) {
+    /* ── Dock: always-visible fixed bottom bar ────────────────────────── */
+    function setDockCollapsed(collapsed, persist = true) {
         dockCollapsed = collapsed;
-        localStorage.setItem(WEBTOON_DOCK_KEY, collapsed.toString());
-        updateDockState();
-        setDockAutoHidden(false);
-        requestAnimationFrame(updateDockPadding);
-    }
+        if (persist) localStorage.setItem(DOCK_COLLAPSED_KEY, String(collapsed));
 
-    function updateDockState() {
-        if (!webtoonDockEl) return;
-        webtoonDockEl.classList.toggle('collapsed', dockCollapsed);
-        webtoonDockEl.classList.toggle('expanded',  !dockCollapsed);
-        if (dockToggleBtn) {
-            dockToggleBtn.setAttribute('aria-expanded', (!dockCollapsed).toString());
-            dockToggleBtn.setAttribute('aria-label',
-                dockCollapsed ? 'Expand dock' : 'Collapse dock');
-        }
+        if (!webtoonDockEl || !dockContentEl || !dockToggleBtn) return;
+        webtoonDockEl.classList.toggle('collapsed', collapsed);
+        webtoonDockEl.classList.toggle('expanded',  !collapsed);
+        dockContentEl.style.display = collapsed ? 'none' : 'block';
+        dockToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+        dockToggleBtn.setAttribute('aria-label',    collapsed ? 'Expand toolbar' : 'Collapse toolbar');
+
+        // Rotate chevron: points UP when expanded (content visible), DOWN when collapsed
+        const icon = dockToggleBtn.querySelector('.dock-toggle-icon');
+        if (icon) icon.style.transform = collapsed ? 'rotate(180deg)' : '';
+
+        requestAnimationFrame(updateDockPadding);
     }
 
     function updateDockPadding() {
-        if (!scrollContainerEl || !webtoonDockEl || webtoonDockEl.style.display === 'none') {
-            scrollContainerEl && (scrollContainerEl.style.paddingBottom = '');
-            document.documentElement.style.removeProperty('--dock-safe-offset');
-            return;
-        }
-        const h = Math.ceil(webtoonDockEl.getBoundingClientRect().height);
-        scrollContainerEl.style.paddingBottom = `${h}px`;
-        document.documentElement.style.setProperty('--dock-safe-offset', `${h}px`);
-    }
-
-    function setDockAutoHidden(hidden) {
-        if (!webtoonDockEl) return;
-        dockAutoHidden = hidden;
-        webtoonDockEl.classList.toggle('auto-hidden', hidden);
-    }
-
-    /* ── Window scroll handler ────────────────────────────────────────── */
-    function handleWindowScroll() {
-        if (readingMode !== 'scroll') return;
-        const delta = window.scrollY - lastScrollY;
-        lastScrollY = window.scrollY;
-        if (Math.abs(delta) >= 6) setDockAutoHidden(delta > 0);
-    }
-
-    /* ── Tap centre of scroll strip → toggle dock ─────────────────────── */
-    function handleScrollTap(event) {
-        if (readingMode !== 'scroll') return;
-        if (event.target.closest('button, a, input, select, label')) return;
-        const xRatio = event.clientX / window.innerWidth;
-        if (xRatio > 0.25 && xRatio < 0.75) {
-            if (dockAutoHidden) { setDockAutoHidden(false); return; }
-            setDockCollapsed(!dockCollapsed);
-        }
-    }
-
-    /* ── Keyboard navigation ──────────────────────────────────────────── */
-    function handleKeydown(event) {
-        if (outputEl.style.display !== 'block') return;
-        const t = event.target;
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'
-                  || t.tagName === 'SELECT' || t.isContentEditable)) return;
-        if (document.body.classList.contains('lg-on')) return;
-        if (event.key === 'ArrowLeft')  { event.preventDefault(); goToRelativePage(-1); }
-        if (event.key === 'ArrowRight') { event.preventDefault(); goToRelativePage(1); }
+        if (!scrollContainerEl || !pagedContainerEl) return;
+        const h = webtoonDockEl?.style.display !== 'none'
+            ? Math.ceil(webtoonDockEl.getBoundingClientRect().height)
+            : 0;
+        const pad = h + 12 + 'px';
+        scrollContainerEl.style.paddingBottom = pad;
+        pagedContainerEl.style.paddingBottom  = pad;
+        document.documentElement.style.setProperty('--dock-height', h + 'px');
     }
 
     /* ── Page navigation ──────────────────────────────────────────────── */
     function goToRelativePage(delta) {
-        if (totalPages === 0) return;
-        if (readingMode === 'scroll') {
-            scrollToPageIndex(currentScrollIdx + delta, true);
-        } else {
-            renderPagedImage(currentPageIndex + delta);
-        }
+        if (!totalPages) return;
+        if (readingMode === 'scroll') scrollToPage(currentScrollIdx + delta, true);
+        else renderPagedImage(currentPageIdx + delta);
     }
 
-    function scrollToPageIndex(index, smooth) {
+    function scrollToPage(index, smooth) {
         const i = clamp(index, 0, totalPages - 1);
         currentScrollIdx = i;
-        currentPageIndex = i;
+        currentPageIdx   = i;
         updatePageIndicator();
         scrollPageEls[i]?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
     }
 
     function restartComic() {
-        currentPageIndex = 0;
+        currentPageIdx   = 0;
         currentScrollIdx = 0;
-        if (readingMode === 'scroll') scrollToPageIndex(0, false);
+        if (readingMode === 'scroll') scrollToPage(0, false);
         else renderPagedImage(0);
         updatePageIndicator();
     }
 
     function updatePageIndicator() {
-        const idx   = readingMode === 'scroll' ? currentScrollIdx : currentPageIndex;
-        const label = totalPages === 0 ? '0 / 0' : `${idx + 1} / ${totalPages}`;
+        const idx   = readingMode === 'scroll' ? currentScrollIdx : currentPageIdx;
+        const label = totalPages ? `${idx + 1} / ${totalPages}` : '0 / 0';
         if (pageIndicatorEl)  pageIndicatorEl.textContent  = label;
         if (dockPageIndicator) dockPageIndicator.textContent = label;
     }
 
-    /* ── lightGallery setup ───────────────────────────────────────────── */
+    /* ── Keyboard ─────────────────────────────────────────────────────── */
+    function handleKeydown(e) {
+        if (!outputEl || outputEl.style.display !== 'block') return;
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'
+                  || t.tagName === 'SELECT' || t.isContentEditable)) return;
+        if (document.body.classList.contains('lg-on')) return;
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); goToRelativePage(-1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); goToRelativePage(1); }
+    }
+
+    /* ── lightGallery ─────────────────────────────────────────────────── */
     function buildLightboxLinks() {
         if (!lightboxLinksEl) return;
         lightboxLinksEl.innerHTML = '';
         pageUrls.forEach((url, i) => {
             const a = document.createElement('a');
-            a.href  = url;
+            a.href = url;
             a.setAttribute('aria-label', `Page ${i + 1}`);
             lightboxLinksEl.appendChild(a);
         });
@@ -694,8 +570,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function initGallery() {
         if (!lightboxLinksEl || typeof window.lightGallery !== 'function') return;
         if (lgInstance) { lgInstance.destroy(true); lgInstance = null; }
-
-        /* [FIX] lightGallery v2 API — plugins array, correct event name */
         lgInstance = window.lightGallery(lightboxLinksEl, {
             selector: 'a',
             plugins: [window.lgZoom, window.lgFullscreen, window.lgThumbnail,
@@ -704,55 +578,33 @@ document.addEventListener('DOMContentLoaded', () => {
             thumbnail: true, animateThumb: true, showThumbByDefault: true,
             autoplay: false, rotate: true
         });
-
-        /* [FIX] lgAfterSlide — v1 used onAfterSlide */
-        lightboxLinksEl.removeEventListener('lgAfterSlide', onLgSlide);
-        lightboxLinksEl.addEventListener('lgAfterSlide', onLgSlide);
+        lightboxLinksEl.addEventListener('lgAfterSlide', (e) => {
+            currentPageIdx   = e.detail.index;
+            currentScrollIdx = e.detail.index;
+            updatePageIndicator();
+        });
     }
 
-    function onLgSlide(e) {
-        const i = e.detail.index;
-        currentPageIndex = i;
-        currentScrollIdx = i;
-        updatePageIndicator();
-    }
-
-    /* ── Click paged image → open lightbox ────────────────────────────── */
-    pagedImageLinkEl?.addEventListener('click', (event) => {
-        if (!lightboxLinksEl?.children.length) return;
-        event.preventDefault();
-        lightboxLinksEl.children[currentPageIndex]?.click();
-    });
-
-    /* ══════════════════════════════════════════════════════════════════════
-       RESET & CLEANUP
-    ══════════════════════════════════════════════════════════════════════ */
+    /* ── Reset / cleanup ──────────────────────────────────────────────── */
     function resetReader() {
-        pageUrls       = [];
-        totalPages     = 0;
-        pagesLoaded    = 0;
-        currentPageIndex = 0;
+        pageUrls         = [];
+        totalPages       = 0;
+        pagesLoaded      = 0;
+        currentPageIdx   = 0;
         currentScrollIdx = 0;
-        scrollPageEls  = [];
-        scrollEdgeData = [];
-        visibilityRatios = new Map();
+        scrollPageEls    = [];
+        scrollEdgeData   = [];
+        visibilityMap    = new Map();
         scrollModeReady  = false;
-        dockAutoHidden   = false;
         if (scrollSaveTimer) { clearTimeout(scrollSaveTimer); scrollSaveTimer = null; }
         clearScrollObservers();
-        if (lightboxLinksEl)   lightboxLinksEl.innerHTML  = '';
+        if (lightboxLinksEl)   lightboxLinksEl.innerHTML   = '';
         if (scrollContainerEl) scrollContainerEl.innerHTML = '';
         if (pagedImageEl)      pagedImageEl.removeAttribute('src');
-        if (pagedContainerEl)  pagedContainerEl.style.display = 'block';
-        if (scrollContainerEl) {
-            scrollContainerEl.style.display      = 'none';
-            scrollContainerEl.style.paddingBottom = '';
-        }
-        if (webtoonDockEl) {
-            webtoonDockEl.style.display = 'none';
-            webtoonDockEl.classList.remove('auto-hidden');
-        }
         outputEl.classList.remove('scroll-mode');
+        pagedContainerEl.style.display  = 'block';
+        scrollContainerEl.style.display = 'none';
+        webtoonDockEl.style.display     = 'none';
         if (readerMetaEl) readerMetaEl.textContent = '';
         updatePageIndicator();
     }
@@ -767,47 +619,34 @@ document.addEventListener('DOMContentLoaded', () => {
         sePreConEl.style.display = 'none';
         outputEl.style.display   = 'block';
         if (readerMetaEl) {
-            readerMetaEl.textContent = '';  // clear first [SEC]
-            const span = document.createElement('span');
-            span.style.color = '#ef4444';
-            span.textContent = msg;         // [SEC] textContent only
-            readerMetaEl.appendChild(span);
+            readerMetaEl.textContent = '';
+            const s = document.createElement('span');
+            s.style.color = '#ef4444';
+            s.textContent = msg;          // textContent only — no XSS
+            readerMetaEl.appendChild(s);
         }
-        if (readerToolbarEl) readerToolbarEl.style.display = 'none';
     }
 
-    /* ══════════════════════════════════════════════════════════════════════
-       VALIDATION & UTILITIES
-    ══════════════════════════════════════════════════════════════════════ */
+    /* ── Utilities ────────────────────────────────────────────────────── */
     function validateFile(file) {
         const ext = '.' + file.name.split('.').pop().toLowerCase();
-        if (!ALLOWED_EXT.has(ext))
-            return `Unsupported file type "${ext}". Please use .cbr, .cbz, or .cbt.`;
-        if (file.size > MAX_FILE_BYTES)
-            return `File too large (${fmtBytes(file.size)}). Maximum is 1 GB.`;
+        if (!ALLOWED_EXT.has(ext)) return `Unsupported file "${ext}". Use .cbr, .cbz, or .cbt.`;
+        if (file.size > MAX_FILE_BYTES) return `File too large (${fmtBytes(file.size)}). Max 1 GB.`;
         return null;
     }
 
-    function getExt(filename) {
-        const parts = filename.split('.');
-        return parts.length > 1 ? parts.pop().toLowerCase() : '';
+    function getExt(fn) { const p = fn.split('.'); return p.length > 1 ? p.pop().toLowerCase() : ''; }
+
+    function getMIME(fn) {
+        return { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif',
+                 bmp:'image/bmp',  webp:'image/webp', avif:'image/avif',
+                 tif:'image/tiff', tiff:'image/tiff' }[getExt(fn)] || 'image/jpeg';
     }
 
-    function getMIME(filename) {
-        const map = {
-            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-            gif: 'image/gif',  bmp: 'image/bmp',   webp: 'image/webp',
-            avif: 'image/avif', tif: 'image/tiff', tiff: 'image/tiff'
-        };
-        return map[getExt(filename)] || 'image/jpeg';
-    }
-
-    /* [DHL] naturalCompare — chunk-based numeric sort */
     function naturalCompare(a, b) {
         const ax = String(a).toLowerCase().match(/\d+|\D+/g) || [];
         const bx = String(b).toLowerCase().match(/\d+|\D+/g) || [];
-        const len = Math.min(ax.length, bx.length);
-        for (let i = 0; i < len; i++) {
+        for (let i = 0; i < Math.min(ax.length, bx.length); i++) {
             const an = Number(ax[i]), bn = Number(bx[i]);
             const both = !isNaN(an) && !isNaN(bn);
             if (both && an !== bn) return an - bn;

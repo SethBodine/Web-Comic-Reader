@@ -7,29 +7,20 @@
     <title>Web Comic Reader</title>
 
     <!--
-      CHANGELOG (index.html) — v2.2.0
+      CHANGELOG (index.html) — v2.2.3
       ─────────────────────────────────────────────────────────────────────
-      [SCOPE]  No local library, no folder picker, no IndexedDB, no series
-               view. This is a pure drag-drop / click-to-open reader.
-
-      [MERGE DHLKeyuser cursor branch]
-        - #readerToolbar: paged/scroll mode toggle, prev/next page, chapter
-          nav (shown only when opened from a multi-file session), zoom,
-          smart-gap toggle, restart button
-        - #pagedContainer: single full-width image + hidden lightbox anchors
-        - #scrollContainer: continuous vertical webtoon strip
-        - #webtoonDock: fixed bottom bar — page counter, chapter nav,
-          collapse/expand, auto-hides on scroll-down
-        - #nextChapterFloat: floating "Next Chapter →" button
-
-      [FIX]  frame-ancestors removed from <meta> CSP (browser-ignored;
-             enforced only in the HTTP _headers file).
-      [FIX]  Dropzone vendored locally — CDN served wrong MIME type.
-      [FIX]  'unsafe-eval' removed from script-src.
-      [FEAT] Drag-drop zone: upload icon, clear labels, large-file warning,
-             chunk-progress bar.
-      [FEAT] lightGallery 2.7.2 — replaces abandoned 1.4.0.
-      [FEAT] JSZip 3.10.1 CDN — replaces bundled 2.x.
+      [FIX v2.2.3] Toolbar structure rewritten to match DHLKeyuser live site
+                   (https://dhlkeyuser.github.io/Web-Comic-Reader/).
+                   Toolbar is now ALWAYS a fixed bottom bar — it is NOT
+                   hidden inside a collapsible dock content area.
+                   The dock handle shows: page counter · chevron only.
+                   The full toolbar (mode/nav/zoom/smart-gap) is the
+                   expanded dock content, visible by default.
+      [FIX v2.2.2] ?v=2.2.3 cache-buster on all local assets.
+      [FIX v2.2.1] archiveOpenFile ZIP Promise handled in uncompress.js.
+      [FIX v2.2.1] Document-level dragover/drop preventDefault in Dropzone.
+      [FIX v2.2.0] frame-ancestors removed from meta CSP.
+      [FIX v2.2.0] Dropzone vendored locally (CDN MIME failure).
     -->
 
     <meta http-equiv="Content-Security-Policy"
@@ -47,25 +38,24 @@
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/css/lightgallery-bundle.min.css"
           crossorigin="anonymous" />
-    <link rel="stylesheet" href="./assets/js/vendor/dropzone.min.css?v=2.2.2" />
-    <link rel="stylesheet" href="./assets/css/styles.css?v=2.2.2" />
+    <link rel="stylesheet" href="./assets/js/vendor/dropzone.min.css?v=2.2.3" />
+    <link rel="stylesheet" href="./assets/css/styles.css?v=2.2.3" />
 
     <noscript><p style="text-align:center;padding:40px">JavaScript is required.</p></noscript>
 </head>
 <body>
 
-    <!-- ── Loading overlay ───────────────────────────────────────────────── -->
+    <!-- Loading overlay -->
     <div class="se-pre-con" role="status" aria-live="polite" aria-label="Loading comic">
         <div class="spinner"></div>
         <div class="progress-text">Reading 0/0 pages</div>
-        <!-- Large-file byte-level progress bar -->
         <div class="chunk-progress" id="chunkProgress" style="display:none">
             <div class="chunk-bar-wrap"><div class="chunk-bar" id="chunkBar"></div></div>
             <div class="chunk-label" id="chunkLabel">Loading…</div>
         </div>
     </div>
 
-    <!-- ── Upload panel ──────────────────────────────────────────────────── -->
+    <!-- Upload panel — collapses to a thin strip at top once comic opens -->
     <div class="wrap">
         <button class="collapse-btn" id="collapseBtn" aria-label="Minimise upload panel">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
@@ -78,7 +68,6 @@
             <h1>Web Comic Reader</h1>
             <p>Open a comic file to start reading</p>
 
-            <!-- Drag-and-drop / click-to-open zone -->
             <form id="dropzone" class="dropzone" aria-label="Drop a comic file here or click to browse">
                 <div class="dz-message" data-dz-message>
                     <svg class="dz-upload-icon" width="44" height="44" viewBox="0 0 24 24"
@@ -119,80 +108,101 @@
         <div class="footer-collapsed" id="footerCollapsedText">Open another file</div>
     </div>
 
-    <!-- ── Comic reader output ────────────────────────────────────────────
-         Structure from DHLKeyuser/Web-Comic-Reader cursor branch.
-         Supports: paged mode, webtoon/scroll mode, lightbox, webtoon dock.
+    <!-- ── Comic output ───────────────────────────────────────────────────
+         Layout mirrors DHLKeyuser live site:
+         • #readerMeta    — archive title (above scroll/paged area)
+         • #pagedContainer — paged mode image + hidden lightbox anchors
+         • #scrollContainer — webtoon continuous strip
+         • #readerToolbar  — ALWAYS fixed bottom bar (inside dock expanded area)
+         • #webtoonDock    — fixed bottom: handle (page counter + chevron)
+                             + expanded content (full toolbar)
     ─────────────────────────────────────────────────────────────────────── -->
     <div id="output">
 
-        <!-- Reader toolbar: mode toggle · page nav · zoom · smart-gap -->
-        <div id="readerToolbar" class="reader-toolbar" style="display:none">
-            <div class="reader-toolbar-group mode-group">
-                <span class="toolbar-label">Mode</span>
-                <div class="mode-toggle" role="group" aria-label="Reading mode">
-                    <button type="button" class="mode-btn" data-reading-mode="paged"
-                            aria-pressed="false">Paged</button>
-                    <button type="button" class="mode-btn" data-reading-mode="scroll"
-                            aria-pressed="false">Webtoon</button>
-                </div>
-            </div>
-            <div class="reader-toolbar-group nav-group">
-                <button type="button" id="prevPageBtn" class="reader-btn"
-                        aria-label="Previous page">Prev</button>
-                <div id="pageIndicator" class="page-indicator">0 / 0</div>
-                <button type="button" id="nextPageBtn" class="reader-btn"
-                        aria-label="Next page">Next</button>
-            </div>
-            <div class="reader-toolbar-group restart-group">
-                <button type="button" id="restartChapterBtn" class="reader-btn"
-                        aria-label="Restart from page 1">Restart</button>
-            </div>
-            <div class="reader-toolbar-group zoom-group">
-                <button type="button" id="zoomOutBtn" class="reader-btn" aria-label="Zoom out">−</button>
-                <span id="zoomLevel" class="zoom-level">100%</span>
-                <button type="button" id="zoomInBtn"  class="reader-btn" aria-label="Zoom in">+</button>
-            </div>
-            <label class="reader-toolbar-group smart-gap-toggle">
-                <input type="checkbox" id="smartGapToggle">
-                <span>Smart gaps</span>
-            </label>
-        </div>
-
-        <!-- Comic title / hint line -->
+        <!-- Archive title / hint -->
         <div id="readerMeta" class="reader-meta"></div>
 
-        <!-- Paged mode: single full-width image -->
+        <!-- Paged mode -->
         <div id="pagedContainer" class="paged-container">
             <a id="pagedImageLink" class="paged-image-link" href="#"
                aria-label="Open page in lightbox">
                 <img id="pagedImage" class="paged-image" alt="" />
             </a>
-            <!-- Hidden anchor pool for lightGallery -->
             <div id="lightboxLinks" class="lightbox-links" aria-hidden="true"></div>
         </div>
 
-        <!-- Webtoon / Scroll mode: continuous vertical strip -->
+        <!-- Webtoon / Scroll mode -->
         <div id="scrollContainer" class="scroll-container" style="display:none"></div>
 
-        <!-- Webtoon dock: fixed bottom bar -->
-        <div id="webtoonDock" class="webtoon-dock collapsed" style="display:none">
+        <!-- ── Fixed bottom dock ─────────────────────────────────────────
+             Structure from DHLKeyuser live site:
+             Handle: page-counter | chevron-toggle
+             Content (expanded): full reader toolbar
+        ──────────────────────────────────────────────────────────────── -->
+        <div id="webtoonDock" class="webtoon-dock" style="display:none">
+
+            <!-- Always-visible handle strip -->
             <div class="webtoon-dock-handle">
-                <div id="dockPageIndicator" class="dock-page-indicator">0 / 0</div>
+                <span id="dockPageIndicator" class="dock-page-indicator">0 / 0</span>
                 <button type="button" id="dockToggleBtn" class="dock-toggle-btn"
-                        aria-label="Toggle dock" aria-expanded="false">
-                    <svg class="dock-toggle-icon" width="20" height="20" viewBox="0 0 20 20"
-                         fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        aria-label="Collapse toolbar" aria-expanded="true">
+                    <svg class="dock-toggle-icon" width="18" height="18"
+                         viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                         aria-hidden="true">
                         <polyline points="6 12 10 8 14 12"></polyline>
                     </svg>
                 </button>
             </div>
-            <div id="webtoonDockContent" class="webtoon-dock-content"></div>
-        </div>
-    </div>
 
-    <!-- ── Scripts ───────────────────────────────────────────────────────── -->
-    <script src="./assets/js/uncompress/uncompress.js?v=2.2.2"></script>
+            <!-- Expandable toolbar — visible by default -->
+            <div id="webtoonDockContent" class="webtoon-dock-content">
+                <div id="readerToolbar" class="reader-toolbar">
+
+                    <div class="reader-toolbar-group mode-group">
+                        <span class="toolbar-label">Reading Mode</span>
+                        <div class="mode-toggle" role="group" aria-label="Reading mode">
+                            <button type="button" class="mode-btn"
+                                    data-reading-mode="paged" aria-pressed="false">Paged</button>
+                            <button type="button" class="mode-btn"
+                                    data-reading-mode="scroll" aria-pressed="false">Webtoon / Scroll</button>
+                        </div>
+                    </div>
+
+                    <div class="reader-toolbar-group nav-group">
+                        <button type="button" id="prevPageBtn" class="reader-btn"
+                                aria-label="Previous page">Prev</button>
+                        <span id="pageIndicator" class="page-indicator">0 / 0</span>
+                        <button type="button" id="nextPageBtn" class="reader-btn"
+                                aria-label="Next page">Next</button>
+                    </div>
+
+                    <div class="reader-toolbar-group restart-group">
+                        <button type="button" id="restartChapterBtn" class="reader-btn"
+                                aria-label="Restart from page 1">Restart</button>
+                    </div>
+
+                    <div class="reader-toolbar-group zoom-group">
+                        <button type="button" id="zoomOutBtn" class="reader-btn"
+                                aria-label="Zoom out">−</button>
+                        <span id="zoomLevel" class="zoom-level">100%</span>
+                        <button type="button" id="zoomInBtn"  class="reader-btn"
+                                aria-label="Zoom in">+</button>
+                    </div>
+
+                    <label class="reader-toolbar-group smart-gap-toggle">
+                        <input type="checkbox" id="smartGapToggle">
+                        <span>Smart gap removal</span>
+                    </label>
+
+                </div><!-- #readerToolbar -->
+            </div><!-- #webtoonDockContent -->
+        </div><!-- #webtoonDock -->
+
+    </div><!-- #output -->
+
+    <!-- Scripts -->
+    <script src="./assets/js/uncompress/uncompress.js?v=2.2.3"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"
             crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/lightgallery.umd.min.js"
@@ -207,7 +217,7 @@
             crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/rotate/lg-rotate.umd.min.js"
             crossorigin="anonymous"></script>
-    <script src="./assets/js/vendor/dropzone.min.js?v=2.2.2"></script>
-    <script src="./assets/js/script.js?v=2.2.2"></script>
+    <script src="./assets/js/vendor/dropzone.min.js?v=2.2.3"></script>
+    <script src="./assets/js/script.js?v=2.2.3"></script>
 </body>
 </html>
