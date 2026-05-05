@@ -1,5 +1,5 @@
 /**
- * Web Comic Reader — script.js  v2.2.3
+ * Web Comic Reader — script.js  v2.5.0
  *
  * CHANGELOG
  * ─────────────────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pagedContainerEl  = document.getElementById('pagedContainer');
     const pagedImageLinkEl  = document.getElementById('pagedImageLink');
     const pagedImageEl      = document.getElementById('pagedImage');
-    const lightboxLinksEl   = document.getElementById('lightboxLinks');
+    // lightboxLinksEl removed — PhotoSwipe 5 uses a JS data array, not DOM anchors
     const scrollContainerEl = document.getElementById('scrollContainer');
     const webtoonDockEl     = document.getElementById('webtoonDock');
     const dockContentEl     = document.getElementById('webtoonDockContent');
@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let visibilityMap   = new Map();
     let lazyObserver    = null;
     let visObserver     = null;
-    let lgInstance      = null;
+    let pswpInstance    = null;  // PhotoSwipe 5 instance
     let currentFilename = '';
     let scrollSaveTimer = null;
     const activeBlobURLs= new Set();
@@ -256,9 +256,9 @@ document.addEventListener('DOMContentLoaded', () => {
     restartBtn?.addEventListener('click', restartComic);
     dockToggleBtn?.addEventListener('click', () => setDockCollapsed(!dockCollapsed));
     pagedImageLinkEl?.addEventListener('click', (e) => {
-        if (!lightboxLinksEl?.children.length) return;
         e.preventDefault();
-        lightboxLinksEl.children[currentPageIdx]?.click();
+        if (!pageUrls.length) return;
+        openPhotoSwipe(currentPageIdx);
     });
 
     document.addEventListener('keydown', handleKeydown);
@@ -276,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         progressTextEl.textContent = 'Reading 0/0 pages';
         sePreConEl.style.display   = 'block';
 
-        if (lgInstance) { lgInstance.destroy(true); lgInstance = null; }
+        if (pswpInstance) { pswpInstance.destroy(); pswpInstance = null; }
         revokeAllBlobs();
         resetReader();
 
@@ -333,8 +333,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function processArchive(archive) {
+        const IMAGE_MIMES = new Set([
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'image/bmp', 'image/avif', 'image/tiff'
+        ]);
         const entries = archive.entries
-            .filter(e => e.is_file && getExt(e.name) !== '')
+            .filter(e => e.is_file && IMAGE_MIMES.has(getMIME(e.name)))
             .sort((a, b) => naturalCompare(a.name, b.name));
 
         totalPages  = entries.length;
@@ -373,8 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 : 'Click a page to open gallery';
         }
 
-        buildLightboxLinks();
-        initGallery();
+        preloadPhotoSwipeImages();  // resolve blob dimensions ready for PhotoSwipe
 
         currentPageIdx  = 0;
         currentScrollIdx = 0;
@@ -650,43 +653,113 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'
                   || t.tagName === 'SELECT' || t.isContentEditable)) return;
-        if (document.body.classList.contains('lg-on')) return;
+        if (document.querySelector('.pswp--open')) return; // PhotoSwipe handles its own keys
         if (e.key === 'ArrowLeft')  { e.preventDefault(); goToRelativePage(-1); }
         if (e.key === 'ArrowRight') { e.preventDefault(); goToRelativePage(1); }
     }
 
-    /* ── lightGallery ─────────────────────────────────────────────────── */
-    function buildLightboxLinks() {
-        if (!lightboxLinksEl) return;
-        lightboxLinksEl.innerHTML = '';
+    /* ── PhotoSwipe 5 lightbox ─────────────────────────────────────────────
+       PhotoSwipe 5 (MIT) — self-hosted, no CDN, no license restrictions.
+       Replaces lightGallery 2.7.2 which had commercial licensing restrictions.
+
+       Architecture:
+         pswpDataSource — array of { src, width, height, alt } built once all
+           blob URLs are created. Width/height are required by PhotoSwipe for
+           correct zoom-level calculation. We resolve them by loading each blob
+           into an Image object after finaliseLoad().
+         openPhotoSwipe(index) — creates a fresh PhotoSwipe instance at the
+           given slide index and calls .init(). PhotoSwipe appends its own
+           DOM (a .pswp div) directly to document.body and removes it on close.
+           A fresh instance per open is the recommended PhotoSwipe 5 pattern.
+         'change' event — fires when the user swipes/navigates to a new slide.
+           We sync currentPageIdx / currentScrollIdx and the page indicator.
+
+       What's retained vs lightGallery:
+         ✅ Pinch-to-zoom, double-tap zoom  (PhotoSwipe's core strength)
+         ✅ Swipe gestures, touch support
+         ✅ Keyboard nav (←/→/Esc)
+         ✅ Fullscreen (via Fullscreen API, triggered from within PhotoSwipe)
+         ✅ Loop through all pages
+         ✅ Opens at current page index
+         ✅ Syncs page indicator on slide change
+         ❌ Thumbnail filmstrip (removed — redundant with toolbar nav)
+         ❌ Autoplay (removed — not meaningful for comics)
+         ❌ Rotate (removed — handled by device orientation or OS)
+    ──────────────────────────────────────────────────────────────────────── */
+
+    /** @type {Array<{src:string,width:number,height:number,alt:string}>} */
+    let pswpDataSource = [];
+
+    /**
+     * After all blob URLs are ready, load each as an Image to capture its
+     * natural dimensions — required by PhotoSwipe for correct zoom behaviour.
+     * Populates pswpDataSource in background; PhotoSwipe is opened on demand.
+     */
+    function preloadPhotoSwipeImages() {
+        pswpDataSource = [];
         pageUrls.forEach((url, i) => {
-            const a = document.createElement('a');
-            a.href = url;
-            a.setAttribute('aria-label', `Page ${i + 1}`);
-            lightboxLinksEl.appendChild(a);
+            const entry = { src: url, width: 0, height: 0, alt: `Page ${i + 1}` };
+            pswpDataSource.push(entry);
+            const img = new Image();
+            img.onload = () => {
+                entry.width  = img.naturalWidth;
+                entry.height = img.naturalHeight;
+            };
+            img.src = url;
         });
     }
 
-    function initGallery() {
-        if (!lightboxLinksEl || typeof window.lightGallery !== 'function') return;
-        if (lgInstance) { lgInstance.destroy(true); lgInstance = null; }
-        lgInstance = window.lightGallery(lightboxLinksEl, {
-            selector: 'a',
-            plugins: [window.lgZoom, window.lgFullscreen, window.lgThumbnail,
-                      window.lgAutoplay, window.lgRotate],
-            zoom: true, download: false, enableSwipe: true,
-            thumbnail: true, animateThumb: true, showThumbByDefault: true,
-            autoplay: false, rotate: true,
-            // licenseKey suppresses the console.warn about production licensing.
-            // lightGallery is free for open-source / non-commercial use; this
-            // key is the documented value for open-source projects.
-            licenseKey: 'your_license_key'
+    /**
+     * Open PhotoSwipe at the given page index.
+     * Creates a fresh instance — recommended pattern for PhotoSwipe 5.
+     *
+     * @param {number} index  Zero-based page index to open at.
+     */
+    function openPhotoSwipe(index) {
+        if (!pswpDataSource.length) return;
+        if (typeof window.PhotoSwipeLightbox !== 'function' ||
+            typeof window.PhotoSwipe !== 'function') return;
+
+        const lightbox = new window.PhotoSwipeLightbox({
+            dataSource:       pswpDataSource,
+            index:            clamp(index, 0, pswpDataSource.length - 1),
+            pswpModule:       window.PhotoSwipe,
+            // UI options
+            bgOpacity:        0.92,
+            loop:             false,          // comics have a clear start/end
+            spacing:          0.05,
+            arrowKeys:        true,
+            escKey:           true,
+            pinchToClose:     false,          // pinch-close is confusing for comics
+            closeOnVerticalDrag: true,
+            imageClickAction: 'zoom-or-close',
+            bgClickAction:    'close',
+            doubleTapAction:  'zoom',
+            trapFocus:        true,
+            returnFocus:      true,
         });
-        lightboxLinksEl.addEventListener('lgAfterSlide', (e) => {
-            currentPageIdx   = e.detail.index;
-            currentScrollIdx = e.detail.index;
+
+        // ALL listeners must be registered before loadAndOpen() — the async
+        // module resolution can fire events immediately on completion.
+
+        // 'change' fires when the user navigates to a different slide.
+        lightbox.on('change', () => {
+            const pswp = lightbox.pswp;
+            if (!pswp) return;
+            const i = pswp.currIndex;
+            currentPageIdx   = i;
+            currentScrollIdx = i;
             updatePageIndicator();
         });
+
+        // Store the lightbox (not pswp) — pswp only exists after afterInit,
+        // but lightbox.destroy() cleans up both. Cleared on destroy.
+        lightbox.on('afterInit', () => { pswpInstance = lightbox; });
+        lightbox.on('destroy',   () => { pswpInstance = null; });
+
+        // loadAndOpen() is the single correct entry point — preloads the pswpModule,
+        // creates the PhotoSwipe instance, inits and opens at the given index.
+        lightbox.loadAndOpen(clamp(index, 0, pswpDataSource.length - 1));
     }
 
     /* ── Reset / cleanup ──────────────────────────────────────────────── */
@@ -700,9 +773,10 @@ document.addEventListener('DOMContentLoaded', () => {
         scrollEdgeData   = [];
         visibilityMap    = new Map();
         scrollModeReady  = false;
+        pswpDataSource   = [];
+        if (pswpInstance) { pswpInstance.destroy(); pswpInstance = null; }
         if (scrollSaveTimer) { clearTimeout(scrollSaveTimer); scrollSaveTimer = null; }
         clearScrollObservers();
-        if (lightboxLinksEl)   lightboxLinksEl.innerHTML   = '';
         if (scrollContainerEl) scrollContainerEl.innerHTML = '';
         if (pagedImageEl)      pagedImageEl.removeAttribute('src');
         outputEl.classList.remove('scroll-mode');

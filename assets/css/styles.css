@@ -205,7 +205,7 @@ p  { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
     border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.08);
     display: block; margin: 0 auto;
 }
-.lightbox-links { display: none; }
+/* (lightbox-links div removed — PhotoSwipe 5 uses a JS data array, not DOM anchors) */
 
 /* ── Scroll / Webtoon mode ──────────────────────────────────────────────── */
 .scroll-container {

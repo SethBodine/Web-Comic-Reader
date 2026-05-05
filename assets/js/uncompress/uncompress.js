@@ -256,12 +256,9 @@
             throw new Error('No readable entries found in archive.');
         }
 
-        // Sort by name — numeric-aware locale collation so page10 > page9.
-        entries.sort(function (a, b) {
-            return a.name.localeCompare(b.name, undefined, {
-                numeric: true, sensitivity: 'base'
-            });
-        });
+        // Note: entries are NOT sorted here. processArchive() in script.js
+        // applies naturalCompare sorting after filtering to image files only,
+        // which is the correct place to own display ordering.
 
         return {
             file_name:    file_name,

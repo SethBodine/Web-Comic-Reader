@@ -7,41 +7,36 @@
     <title>Web Comic Reader</title>
 
     <!--
-      CHANGELOG (index.html) — v2.3.0
+      CHANGELOG (index.html) — v2.5.0
       ─────────────────────────────────────────────────────────────────────
-      [v2.3.0] Security hardening pass:
-               • SRI (Subresource Integrity) hashes added to all CDN resources.
-               • CDN script URLs changed from .umd.min.js → .umd.js to match
-                 exact filenames in the npm package (required for SRI to pass).
-               • script-src CSP tightened: 'unsafe-eval' removed (libarchive-wasm
-                 does not require it; old libunrar.js did).
-               • wasm-unsafe-eval added to script-src (required for WASM execution
-                 in Chromium and Firefox without granting full unsafe-eval).
-               • connect-src updated to allow blob: (WASM streaming fetch).
-               • libarchive-wasm loader scripts added in correct dependency order.
-               • JSZip CDN script removed (no longer needed; libarchive-wasm
-                 handles ZIP natively).
-               • meta CSP kept in sync with _headers (edge CSP takes precedence).
+      [v2.5.0] Replace lightGallery 2.7.2 with PhotoSwipe 5.4.4 (MIT, self-hosted).
+               Remove cdn.jsdelivr.net from all CSP directives — fully self-hosted.
+               Remove #lightboxLinks DOM element — PhotoSwipe uses JS data array.
+               Remove leftover lightGallery fonts/images from assets/.
+               Fix PhotoSwipe event listener ordering (afterInit before loadAndOpen).
+               Store lightbox instance (not pswp) for reliable destroy().
+      [v2.4.0] Full-page drop-anywhere overlay. Favicon. Credits footer.
+               Content-Type: application/wasm header to fix connect-src violations.
+      [v2.3.0] SRI hashes on CDN resources. libarchive-wasm replaces libunrar.js.
+               unsafe-eval removed. localStorage key sanitised. Error messages sanitised.
       [v2.2.3] Toolbar structure rewritten to match DHLKeyuser live site.
       [v2.2.2] ?v= cache-buster on all local assets.
       [v2.2.1] archiveOpenFile ZIP Promise handled in uncompress.js.
-      [v2.2.0] frame-ancestors removed from meta CSP.
-      [v2.2.0] Dropzone vendored locally (CDN MIME failure).
+      [v2.2.0] frame-ancestors removed from meta CSP. Dropzone vendored locally.
     -->
 
     <!--
       Content-Security-Policy notes:
-        script-src 'wasm-unsafe-eval' — required by all WASM (WebAssembly.compile/
-          instantiate) without granting full eval. Separate from 'unsafe-eval'.
-        style-src 'unsafe-inline' — still required by Dropzone 6 inline styles.
-        connect-src blob: — required for WebAssembly.instantiateStreaming which
-          fetches the .wasm file as a Response.
+        All JS, CSS and fonts are now self-hosted — cdn.jsdelivr.net removed entirely.
+        script-src 'wasm-unsafe-eval' — required for WebAssembly.compile/instantiate.
+          Strictly narrower than 'unsafe-eval': permits WASM only, not JS eval().
+        style-src 'unsafe-inline' — still required by Dropzone 6 injected inline styles.
+        connect-src blob: — required for WebAssembly.instantiateStreaming.
     -->
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
-                   script-src  'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval';
-                   style-src   'self' https://cdn.jsdelivr.net 'unsafe-inline';
-                   font-src    'self' https://cdn.jsdelivr.net;
+                   script-src  'self' 'wasm-unsafe-eval';
+                   style-src   'self' 'unsafe-inline';
                    img-src     'self' blob: data:;
                    connect-src 'self' blob:;
                    base-uri    'self';
@@ -50,12 +45,10 @@
     <meta name="theme-color" content="#2563eb" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
 
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/css/lightgallery-bundle.min.css"
-          integrity="sha384-QF2tZINFMG1w+rHohKutut51r8RvPOOD+YB9Sp02ldxwbH5X1TbritYd868hZFZM"
-          crossorigin="anonymous" />
-    <link rel="stylesheet" href="./assets/js/vendor/dropzone.min.css?v=2.4.0" />
-    <link rel="stylesheet" href="./assets/css/styles.css?v=2.4.0" />
+    <!-- PhotoSwipe 5.4.4 (MIT) — self-hosted, no CDN, no license restrictions -->
+    <link rel="stylesheet" href="./assets/js/vendor/photoswipe.css?v=2.5.0" />
+    <link rel="stylesheet" href="./assets/js/vendor/dropzone.min.css?v=2.5.0" />
+    <link rel="stylesheet" href="./assets/css/styles.css?v=2.5.0" />
 
     <noscript><p style="text-align:center;padding:40px">JavaScript is required.</p></noscript>
 </head>
@@ -120,10 +113,10 @@
                 </span>
                 <span class="credits-sep" aria-hidden="true">·</span>
                 <span class="credits-row">
-                    Security &amp; libarchive-wasm by
-                    <a href="https://github.com/afzafri/Web-Comic-Reader"
-                       target="_blank" rel="noopener noreferrer">Claude / Anthropic</a>
-                    2025
+                    Security, libarchive-wasm &amp; PhotoSwipe migration by
+                    <a href="https://www.anthropic.com"
+                       target="_blank" rel="noopener noreferrer">Claude</a>
+                    with Seth Bodine
                 </span>
             </div>
         </footer>
@@ -150,7 +143,6 @@
                aria-label="Open page in lightbox">
                 <img id="pagedImage" class="paged-image" alt="" />
             </a>
-            <div id="lightboxLinks" class="lightbox-links" aria-hidden="true"></div>
         </div>
 
         <!-- Webtoon / Scroll mode -->
@@ -227,12 +219,12 @@
          Load order:
            1. libarchive-browser.js  — esbuild IIFE bundle of libarchive-wasm@1.2.0.
                                        Sets window.libarchiveWasm, window.ArchiveReader,
-                                       window.ArchiveReaderEntry.  The .wasm binary is
-                                       fetched at runtime from the same directory.
-           2. uncompress.js          — thin adapter; exposes the same public API as
-                                       the original workhorsy/uncompress.js so that
-                                       script.js requires zero changes.
-           3. lightGallery + plugins — CDN, SRI-pinned.
+                                       window.ArchiveReaderEntry. WASM binary fetched
+                                       at runtime from the same directory.
+           2. uncompress.js          — thin adapter; same public API as original
+                                       workhorsy/uncompress.js. script.js unchanged.
+           3. photoswipe-lightbox    — PhotoSwipe 5.4.4 (MIT). Self-hosted.
+              photoswipe.umd.min.js    Replaces lightGallery 2.7.2.
            4. dropzone.min.js        — vendored locally.
            5. script.js              — application logic.
     ─────────────────────────────────────────────────────────────────────── -->
@@ -241,30 +233,14 @@
          esbuild IIFE bundle — exposes window.libarchiveWasm, window.ArchiveReader,
          window.ArchiveReaderEntry. The WASM binary (libarchive.wasm) is fetched
          at runtime from the same directory via locateFile() in uncompress.js. -->
-    <script src="./assets/js/uncompress/libarchive-browser.js?v=2.4.0"></script>
-    <script src="./assets/js/uncompress/uncompress.js?v=2.4.0"></script>
+    <script src="./assets/js/uncompress/libarchive-browser.js?v=2.5.0"></script>
+    <script src="./assets/js/uncompress/uncompress.js?v=2.5.0"></script>
 
-    <!-- lightGallery (CDN, SRI-pinned) -->
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/lightgallery.umd.js"
-            integrity="sha384-RejfZ/V3KZqgpiNMxJt37SE0c/gRvmKLqSUmamNdjVrnamKwOmml112jIc+NAnH3"
-            crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/zoom/lg-zoom.umd.js"
-            integrity="sha384-tUVr1kEjlVmms/4I9+nj817nHpcizo+BILWxxJVEppqcbi+QlwoVG3KOuPRtzgbe"
-            crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/fullscreen/lg-fullscreen.umd.js"
-            integrity="sha384-09W9nQ1MrIQqYpRTmeFt4ODmlkPspIIvzoqrY8Y/TcFO/xGW48RQT41+3U0e1dYB"
-            crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/thumbnail/lg-thumbnail.umd.js"
-            integrity="sha384-tL5kdHeZ5YzfixBiZiwVlhFbKof//5A3nAkwjP4sHdmNCOQ14dp8kI7dJNEb1YJ3"
-            crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/autoplay/lg-autoplay.umd.js"
-            integrity="sha384-JLhQDfu1+sWB3wnNBeJKFSePG3Vl4uvcut0dA/1EzFa5WH29qVr3WZOL/WqzA3C/"
-            crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/rotate/lg-rotate.umd.js"
-            integrity="sha384-KMZidG50MwAw2+Jmfp8kQXXvj+hVlDz+5Dss7979BfnxtuOUUqOjPyCOOG+Y/8Qh"
-            crossorigin="anonymous"></script>
+    <!-- PhotoSwipe 5.4.4 (MIT) — self-hosted, no CDN required -->
+    <script src="./assets/js/vendor/photoswipe-lightbox.umd.min.js?v=2.5.0"></script>
+    <script src="./assets/js/vendor/photoswipe.umd.min.js?v=2.5.0"></script>
 
-    <script src="./assets/js/vendor/dropzone.min.js?v=2.4.0"></script>
-    <script src="./assets/js/script.js?v=2.4.0"></script>
+    <script src="./assets/js/vendor/dropzone.min.js?v=2.5.0"></script>
+    <script src="./assets/js/script.js?v=2.5.0"></script>
 </body>
 </html>

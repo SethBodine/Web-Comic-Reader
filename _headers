@@ -1,15 +1,12 @@
 /*
-  # Content-Security-Policy (edge layer — takes precedence over meta CSP in index.html)
+  # Content-Security-Policy
+  # All JS, CSS and fonts are now self-hosted — cdn.jsdelivr.net removed entirely.
+  # 'wasm-unsafe-eval' — permits WebAssembly.compile/instantiate only (not JS eval).
+  # 'unsafe-inline' styles — still required by Dropzone 6 injected inline styles.
+  # connect-src blob: — required for WebAssembly.instantiateStreaming.
+  # frame-ancestors 'none' — blocks clickjacking; must live in headers, not meta CSP.
   #
-  #   script-src 'wasm-unsafe-eval' — required for WebAssembly.compile/instantiate.
-  #     This is strictly narrower than 'unsafe-eval': it permits WASM compilation
-  #     only, not arbitrary JS eval(). Needed by libarchive-wasm.
-  #   style-src 'unsafe-inline' — still required by Dropzone 6 injected inline styles.
-  #   connect-src blob: — required for WebAssembly.instantiateStreaming (fetches .wasm
-  #     as a streaming Response; the fetch is a blob: URL internally in some browsers).
-  #   frame-ancestors 'none' — blocks clickjacking; must be in headers, not meta CSP.
-  #
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' blob: data:; connect-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   X-XSS-Protection: 1; mode=block
