@@ -356,3 +356,65 @@ p  { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
     .webtoon-dock-handle { padding: 4px 12px; }
     .webtoon-dock-content { padding: 6px 12px 10px; }
 }
+
+/* ── Full-page drop overlay ──────────────────────────────────────────── */
+#page-drop-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(37, 99, 235, 0.18);
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+    border: 3px dashed rgba(99, 155, 255, 0.7);
+    border-radius: 12px;
+    margin: 8px;
+    transition: opacity 0.15s;
+}
+#page-drop-overlay.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.page-drop-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 2rem;
+    background: rgba(15, 23, 42, 0.55);
+    border-radius: 16px;
+    backdrop-filter: blur(4px);
+}
+.page-drop-message svg {
+    opacity: 0.9;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+}
+
+/* ── Credits footer ───────────────────────────────────────────────────── */
+.credits {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 10px;
+    font-size: 0.78rem;
+    color: var(--text-muted, #94a3b8);
+    line-height: 1.5;
+    padding: 4px 0;
+}
+.credits a {
+    color: var(--accent, #3b82f6);
+    text-decoration: none;
+    font-weight: 500;
+}
+.credits a:hover { text-decoration: underline; }
+.credits-sep {
+    color: var(--border, #334155);
+    user-select: none;
+}

@@ -32,6 +32,13 @@
 /404.html
   Cache-Control: no-cache, must-revalidate
 
+# Serve the WASM binary with the correct MIME type so WebAssembly.instantiateStreaming
+# succeeds on first attempt. Without this, browsers fall back to the XHR path and
+# may emit multiple connect-src CSP events during retry.
+/assets/js/uncompress/libarchive.wasm
+  Content-Type: application/wasm
+  Cache-Control: public, max-age=31536000, immutable
+
 /assets/*
   Cache-Control: no-cache, must-revalidate
 

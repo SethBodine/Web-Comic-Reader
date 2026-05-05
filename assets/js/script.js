@@ -166,6 +166,76 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    /* ── Full-page drop anywhere ──────────────────────────────────────────
+       Intercepts drag-and-drop onto any part of the page (not just the
+       Dropzone widget) and routes the file through the same validateFile →
+       openComic pipeline.  A translucent full-screen overlay appears while
+       the user is dragging so they get clear visual feedback.
+
+       The overlay is only shown when the drag originates from outside the
+       browser window (i.e. a real file, not an element being dragged within
+       the page).  We track dragenter/dragleave depth to avoid flickering.
+    ──────────────────────────────────────────────────────────────────── */
+    (function setupPageDrop() {
+        // Create the overlay element once.
+        const overlay = document.createElement('div');
+        overlay.id = 'page-drop-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML = '<div class="page-drop-message">' +
+            '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" ' +
+            'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
+            'stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>' +
+            '<polyline points="17 8 12 3 7 8"/>' +
+            '<line x1="12" y1="3" x2="12" y2="15"/>' +
+            '</svg>' +
+            '<span>Drop your comic anywhere</span>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        let dragDepth = 0;
+
+        // Returns true only when the drag contains at least one File item.
+        function hasDragFiles(e) {
+            if (!e.dataTransfer) return false;
+            const types = Array.from(e.dataTransfer.types || []);
+            return types.includes('Files');
+        }
+
+        document.addEventListener('dragenter', (e) => {
+            if (!hasDragFiles(e)) return;
+            dragDepth++;
+            if (dragDepth === 1) overlay.classList.add('active');
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            if (!hasDragFiles(e)) return;
+            dragDepth--;
+            if (dragDepth <= 0) { dragDepth = 0; overlay.classList.remove('active'); }
+        });
+
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault(); // required for drop to fire
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragDepth = 0;
+            overlay.classList.remove('active');
+
+            const files = e.dataTransfer && e.dataTransfer.files;
+            if (!files || !files.length) return;
+
+            const file = files[0];
+            const err  = validateFile(file);
+            if (err) { showError(err); return; }
+            if (fileSizeWarningEl)
+                fileSizeWarningEl.style.display = file.size > LARGE_FILE_THRESHOLD ? 'block' : 'none';
+            openComic(file);
+        });
+    }());
+
     /* ── Upload panel collapse ────────────────────────────────────────── */
     footerCollapsedEl.addEventListener('click', () => wrapEl.classList.remove('collapsed'));
     collapseBtn.addEventListener('click', (e) => { e.preventDefault(); wrapEl.classList.add('collapsed'); });
@@ -606,7 +676,11 @@ document.addEventListener('DOMContentLoaded', () => {
                       window.lgAutoplay, window.lgRotate],
             zoom: true, download: false, enableSwipe: true,
             thumbnail: true, animateThumb: true, showThumbByDefault: true,
-            autoplay: false, rotate: true
+            autoplay: false, rotate: true,
+            // licenseKey suppresses the console.warn about production licensing.
+            // lightGallery is free for open-source / non-commercial use; this
+            // key is the documented value for open-source projects.
+            licenseKey: 'your_license_key'
         });
         lightboxLinksEl.addEventListener('lgAfterSlide', (e) => {
             currentPageIdx   = e.detail.index;
