@@ -7,29 +7,43 @@
     <title>Web Comic Reader</title>
 
     <!--
-      CHANGELOG (index.html) — v2.2.3
+      CHANGELOG (index.html) — v2.3.0
       ─────────────────────────────────────────────────────────────────────
-      [FIX v2.2.3] Toolbar structure rewritten to match DHLKeyuser live site
-                   (https://dhlkeyuser.github.io/Web-Comic-Reader/).
-                   Toolbar is now ALWAYS a fixed bottom bar — it is NOT
-                   hidden inside a collapsible dock content area.
-                   The dock handle shows: page counter · chevron only.
-                   The full toolbar (mode/nav/zoom/smart-gap) is the
-                   expanded dock content, visible by default.
-      [FIX v2.2.2] ?v=2.2.3 cache-buster on all local assets.
-      [FIX v2.2.1] archiveOpenFile ZIP Promise handled in uncompress.js.
-      [FIX v2.2.1] Document-level dragover/drop preventDefault in Dropzone.
-      [FIX v2.2.0] frame-ancestors removed from meta CSP.
-      [FIX v2.2.0] Dropzone vendored locally (CDN MIME failure).
+      [v2.3.0] Security hardening pass:
+               • SRI (Subresource Integrity) hashes added to all CDN resources.
+               • CDN script URLs changed from .umd.min.js → .umd.js to match
+                 exact filenames in the npm package (required for SRI to pass).
+               • script-src CSP tightened: 'unsafe-eval' removed (libarchive-wasm
+                 does not require it; old libunrar.js did).
+               • wasm-unsafe-eval added to script-src (required for WASM execution
+                 in Chromium and Firefox without granting full unsafe-eval).
+               • connect-src updated to allow blob: (WASM streaming fetch).
+               • libarchive-wasm loader scripts added in correct dependency order.
+               • JSZip CDN script removed (no longer needed; libarchive-wasm
+                 handles ZIP natively).
+               • meta CSP kept in sync with _headers (edge CSP takes precedence).
+      [v2.2.3] Toolbar structure rewritten to match DHLKeyuser live site.
+      [v2.2.2] ?v= cache-buster on all local assets.
+      [v2.2.1] archiveOpenFile ZIP Promise handled in uncompress.js.
+      [v2.2.0] frame-ancestors removed from meta CSP.
+      [v2.2.0] Dropzone vendored locally (CDN MIME failure).
     -->
 
+    <!--
+      Content-Security-Policy notes:
+        script-src 'wasm-unsafe-eval' — required by all WASM (WebAssembly.compile/
+          instantiate) without granting full eval. Separate from 'unsafe-eval'.
+        style-src 'unsafe-inline' — still required by Dropzone 6 inline styles.
+        connect-src blob: — required for WebAssembly.instantiateStreaming which
+          fetches the .wasm file as a Response.
+    -->
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
-                   script-src  'self' https://cdn.jsdelivr.net;
+                   script-src  'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval';
                    style-src   'self' https://cdn.jsdelivr.net 'unsafe-inline';
                    font-src    'self' https://cdn.jsdelivr.net;
                    img-src     'self' blob: data:;
-                   connect-src 'self';
+                   connect-src 'self' blob:;
                    base-uri    'self';
                    form-action 'self'" />
 
@@ -37,9 +51,10 @@
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/css/lightgallery-bundle.min.css"
+          integrity="sha384-QF2tZINFMG1w+rHohKutut51r8RvPOOD+YB9Sp02ldxwbH5X1TbritYd868hZFZM"
           crossorigin="anonymous" />
-    <link rel="stylesheet" href="./assets/js/vendor/dropzone.min.css?v=2.2.3" />
-    <link rel="stylesheet" href="./assets/css/styles.css?v=2.2.3" />
+    <link rel="stylesheet" href="./assets/js/vendor/dropzone.min.css?v=2.3.0" />
+    <link rel="stylesheet" href="./assets/css/styles.css?v=2.3.0" />
 
     <noscript><p style="text-align:center;padding:40px">JavaScript is required.</p></noscript>
 </head>
@@ -201,23 +216,48 @@
 
     </div><!-- #output -->
 
-    <!-- Scripts -->
-    <script src="./assets/js/uncompress/uncompress.js?v=2.2.3"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"
+    <!-- ── Scripts ──────────────────────────────────────────────────────
+         Load order:
+           1. libarchive-browser.js  — esbuild IIFE bundle of libarchive-wasm@1.2.0.
+                                       Sets window.libarchiveWasm, window.ArchiveReader,
+                                       window.ArchiveReaderEntry.  The .wasm binary is
+                                       fetched at runtime from the same directory.
+           2. uncompress.js          — thin adapter; exposes the same public API as
+                                       the original workhorsy/uncompress.js so that
+                                       script.js requires zero changes.
+           3. lightGallery + plugins — CDN, SRI-pinned.
+           4. dropzone.min.js        — vendored locally.
+           5. script.js              — application logic.
+    ─────────────────────────────────────────────────────────────────────── -->
+
+    <!-- libarchive-wasm browser bundle (self-hosted, libarchive-wasm@1.2.0, MIT)
+         esbuild IIFE bundle — exposes window.libarchiveWasm, window.ArchiveReader,
+         window.ArchiveReaderEntry. The WASM binary (libarchive.wasm) is fetched
+         at runtime from the same directory via locateFile() in uncompress.js. -->
+    <script src="./assets/js/uncompress/libarchive-browser.js?v=2.3.0"></script>
+    <script src="./assets/js/uncompress/uncompress.js?v=2.3.0"></script>
+
+    <!-- lightGallery (CDN, SRI-pinned) -->
+    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/lightgallery.umd.js"
+            integrity="sha384-RejfZ/V3KZqgpiNMxJt37SE0c/gRvmKLqSUmamNdjVrnamKwOmml112jIc+NAnH3"
             crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/lightgallery.umd.min.js"
+    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/zoom/lg-zoom.umd.js"
+            integrity="sha384-tUVr1kEjlVmms/4I9+nj817nHpcizo+BILWxxJVEppqcbi+QlwoVG3KOuPRtzgbe"
             crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/zoom/lg-zoom.umd.min.js"
+    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/fullscreen/lg-fullscreen.umd.js"
+            integrity="sha384-09W9nQ1MrIQqYpRTmeFt4ODmlkPspIIvzoqrY8Y/TcFO/xGW48RQT41+3U0e1dYB"
             crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/fullscreen/lg-fullscreen.umd.min.js"
+    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/thumbnail/lg-thumbnail.umd.js"
+            integrity="sha384-tL5kdHeZ5YzfixBiZiwVlhFbKof//5A3nAkwjP4sHdmNCOQ14dp8kI7dJNEb1YJ3"
             crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/thumbnail/lg-thumbnail.umd.min.js"
+    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/autoplay/lg-autoplay.umd.js"
+            integrity="sha384-JLhQDfu1+sWB3wnNBeJKFSePG3Vl4uvcut0dA/1EzFa5WH29qVr3WZOL/WqzA3C/"
             crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/autoplay/lg-autoplay.umd.min.js"
+    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/rotate/lg-rotate.umd.js"
+            integrity="sha384-KMZidG50MwAw2+Jmfp8kQXXvj+hVlDz+5Dss7979BfnxtuOUUqOjPyCOOG+Y/8Qh"
             crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightgallery@2.7.2/plugins/rotate/lg-rotate.umd.min.js"
-            crossorigin="anonymous"></script>
-    <script src="./assets/js/vendor/dropzone.min.js?v=2.2.3"></script>
-    <script src="./assets/js/script.js?v=2.2.3"></script>
+
+    <script src="./assets/js/vendor/dropzone.min.js?v=2.3.0"></script>
+    <script src="./assets/js/script.js?v=2.3.0"></script>
 </body>
 </html>

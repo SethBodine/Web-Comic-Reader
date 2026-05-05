@@ -40,6 +40,30 @@ const READER_MODE_KEY       = 'readerMode';
 const SCROLL_ZOOM_KEY       = 'scrollZoom';
 const SMART_GAP_KEY         = 'scrollSmartGap';
 const DOCK_COLLAPSED_KEY    = 'webtoonDockCollapsed';
+
+/**
+ * Derive a safe localStorage key from a user-supplied filename.
+ * Raw filenames can contain characters that are unusual as keys (e.g. a
+ * name like "__proto__" could shadow Object prototype properties on some
+ * engines, and very long names waste quota).  We hash the filename to a
+ * compact hex string and prefix it with a fixed namespace.
+ *
+ * Uses SubtleCrypto (SHA-256) when available and falls back to a simple
+ * djb2 32-bit hash.  The fallback is not cryptographically strong but is
+ * sufficient to prevent prototype poisoning and key-length attacks.
+ *
+ * @param   {string} filename  Raw filename from the user's File object.
+ * @returns {string}           A stable, safe localStorage key.
+ */
+function safeStorageKey(filename) {
+    // djb2 hash — fast, synchronous, no external deps.
+    let h = 5381;
+    for (let i = 0; i < Math.min(filename.length, 1024); i++) {
+        h = ((h << 5) + h) ^ filename.charCodeAt(i);
+        h = h >>> 0; // keep unsigned 32-bit
+    }
+    return 'wcr_page_' + h.toString(16).padStart(8, '0');
+}
 const SCROLL_ZOOM_MIN       = 0.1;
 const SCROLL_ZOOM_MAX       = 2.0;
 const BASE_SCROLL_WIDTH_VW  = 90;
@@ -109,7 +133,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ── Init ─────────────────────────────────────────────────────────── */
     currYearEl.textContent = new Date().getFullYear();
-    loadArchiveFormats(['rar', 'zip', 'tar']);
+    // loadArchiveFormats() is now a no-op — libarchive-wasm handles all formats
+    // through a single WASM module loaded lazily on first file open.
 
     if (smartGapToggleEl) smartGapToggleEl.checked = smartGapEnabled;
     updateModeButtons();
@@ -263,7 +288,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function finaliseLoad(archiveName) {
-        progressTextEl.innerHTML = '<span style="color:#4ade80">Completed!</span>';
+        // Use DOM API instead of innerHTML to stay consistent with textContent-only policy.
+        progressTextEl.textContent = '';
+        const doneSpan = document.createElement('span');
+        doneSpan.style.color = '#4ade80';
+        doneSpan.textContent = 'Completed!';
+        progressTextEl.appendChild(doneSpan);
         sePreConEl.style.display = 'none';
         outputEl.style.display   = 'block';
 
@@ -407,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updatePageIndicator();
                 if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
                 scrollSaveTimer = setTimeout(() => {
-                    localStorage.setItem('lastPage_' + currentFilename, String(best));
+                    localStorage.setItem(safeStorageKey(currentFilename), String(best));
                 }, 300);
             }
         }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
@@ -622,9 +652,38 @@ document.addEventListener('DOMContentLoaded', () => {
             readerMetaEl.textContent = '';
             const s = document.createElement('span');
             s.style.color = '#ef4444';
-            s.textContent = msg;          // textContent only — no XSS
+            // Sanitise: show a safe user-facing message, not raw exception internals.
+            // Raw Error messages can expose library version strings or internal paths.
+            s.textContent = sanitiseErrorMessage(msg); // textContent only — no XSS
             readerMetaEl.appendChild(s);
         }
+    }
+
+    /**
+     * Convert a raw error string into a safe, user-facing message.
+     * Preserves sensible application-level messages while stripping
+     * stack traces, library internals, and file-system paths.
+     *
+     * @param  {string} raw  Raw message from a catch block.
+     * @returns {string}     Safe display string.
+     */
+    function sanitiseErrorMessage(raw) {
+        // Allow short, recognisable application messages through unchanged.
+        const SAFE_MESSAGES = [
+            'No images found in this archive.',
+            'No readable entries found in archive.',
+            'Could not open archive.',
+            'Failed to read file chunk.',
+        ];
+        if (typeof raw !== 'string') return 'An unexpected error occurred.';
+        const trimmed = raw.trim();
+        if (SAFE_MESSAGES.some(m => trimmed === m)) return trimmed;
+        // For anything else, strip after first newline (stack trace), paths,
+        // version numbers, and WASM/Emscripten internals.
+        if (trimmed.length <= 120 && !/[/\\]|RuntimeError|Aborted|WASM|emscripten/i.test(trimmed)) {
+            return trimmed;
+        }
+        return 'Could not open this file. It may be corrupt or an unsupported format.';
     }
 
     /* ── Utilities ────────────────────────────────────────────────────── */

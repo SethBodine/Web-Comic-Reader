@@ -13,6 +13,153 @@ Fork of [afzafri/Web-Comic-Reader](https://github.com/afzafri/Web-Comic-Reader).
 
 ---
 
+## [2.3.0] — Security hardening: SRI, libarchive-wasm, CSP tightening
+
+### Change 1 — `fix(security): add SRI hashes to all CDN resources`
+
+**File:** `index.html`
+
+All eight CDN resources (lightGallery CSS, six lightGallery JS plugins) now carry
+`integrity="sha384-…"` attributes. The browser will refuse to execute or apply any
+CDN resource whose content does not match the pinned hash, protecting against CDN
+compromise and supply-chain attacks.
+
+CDN script URLs changed from `.umd.min.js` → `.umd.js` to match exact filenames in
+the npm package (required for SRI hashes to match what the CDN actually serves).
+
+---
+
+### Change 2 — `fix(deps): replace libunrar.js with libarchive-wasm@1.2.0`
+
+**Files:** `assets/js/uncompress/uncompress.js` (rewritten), `index.html`,
+`assets/js/uncompress/libarchive.js` (new), `assets/js/uncompress/libarchive.wasm` (new),
+`assets/js/uncompress/ArchiveReader.js` (new), `assets/js/uncompress/ArchiveReaderEntry.js` (new),
+`assets/js/uncompress/libarchiveWasm.js` (new), `assets/js/uncompress/wrapLibarchiveWasm.js` (new)
+
+**Removed:** `libunrar.js` (807 KB, ~2015 Emscripten build), `libunrar.js.mem` (62 KB),
+`jszip.js` (287 KB CDN local copy — ZIP now handled by libarchive-wasm)
+
+**Why:** The old `libunrar.js` was an unmaintained ~2015 Emscripten binary. It:
+- Required `'unsafe-eval'` in the CSP (Emscripten asm.js eval path)
+- Did not support RAR5 archives
+- Had no upstream maintenance or security patches
+
+**libarchive-wasm@1.2.0** (MIT licence, actively maintained):
+- Supports ZIP, TAR, RAR v4, RAR v5, 7z — all formats in one WASM module
+- Does **not** require `'unsafe-eval'`; only `'wasm-unsafe-eval'` (narrower)
+- 599 KB WASM binary — smaller than libunrar.js (807 KB) + jszip.js (287 KB) combined
+- Self-hosted alongside the app (CDNs return 403 for WASM files)
+
+**Integration:** `uncompress.js` was rewritten as a thin adapter that exposes exactly
+the same public API (`archiveOpenFile`, `archiveOpenArrayBuffer`, `archiveClose`,
+`isRarFile`, `isZipFile`, `isTarFile`). `script.js` is **unchanged**.
+
+Key implementation notes:
+- `loadArchiveFormats()` is now a no-op kept for API compatibility
+- Entry data is read **eagerly** during archive open — libarchive requires sequential
+  access and cannot seek back once the iterator advances
+- `reader.free()` is called in a `finally` block to always release WASM heap memory
+- Path-traversal guard (`'..'` check) retained from v2.0.0
+- `_scriptBase` captured via `document.currentScript` at load time to locate
+  `libarchive.wasm` — eliminates the throw/catch stack-trace hack in the old code
+
+**JSZip removal:** `assets/js/uncompress/jszip.js` (the local copy) is removed.
+The CDN JSZip script tag in `index.html` is also removed. libarchive-wasm handles
+ZIP natively.
+
+---
+
+### Change 3 — `fix(csp): remove unsafe-eval, add wasm-unsafe-eval and connect-src blob:`
+
+**Files:** `index.html` (meta CSP), `_headers` (edge CSP)
+
+- `'unsafe-eval'` removed from `script-src` — no longer required now that
+  libunrar.js is gone
+- `'wasm-unsafe-eval'` added to `script-src` — required for `WebAssembly.compile`
+  and `WebAssembly.instantiate`; strictly narrower than `'unsafe-eval'`
+- `blob:` added to `connect-src` — required for `WebAssembly.instantiateStreaming`
+  which fetches the `.wasm` file as a streaming `Response`
+
+---
+
+### Change 4 — `fix(headers): add Cache-Control for index.html and 404.html`
+
+**File:** `_headers`
+
+`/index.html` and `/404.html` now have explicit `Cache-Control: no-cache,
+must-revalidate` headers. Previously, only `/assets/*` and `/*.js`/`/*.css`
+had cache headers; a stale cached `index.html` could cause old asset URLs
+(without the current `?v=` cache-buster) to be loaded.
+
+---
+
+### Change 5 — `fix(headers): Permissions-Policy: add screen-wake-lock, clipboard`
+
+**File:** `_headers`
+
+`screen-wake-lock=*` added — permits the app to call `navigator.wakeLock.request()`
+to keep the screen on while reading. The API requires explicit JS invocation; allowing
+it in the policy costs nothing if unused and avoids a header change if the feature
+is added later.
+
+`clipboard-read=()` and `clipboard-write=()` added — explicitly deny clipboard
+access (was previously unspecified, which defaults to allow in some contexts).
+
+---
+
+### Change 6 — `feat: add 404.html`
+
+**File:** `404.html` (new)
+
+Cloudflare Pages serves `/404.html` for requests that don't match any static asset
+and aren't caught by `_redirects`. The page matches the app's visual style and links
+back to the reader. Has its own minimal CSP (no external resources).
+
+---
+
+### Change 7 — `fix(security): sanitise localStorage key from raw filename`
+
+**File:** `assets/js/script.js`
+
+Page-progress was saved as `localStorage.setItem('lastPage_' + filename, ...)`.
+A crafted filename such as `__proto__` could shadow `Object.prototype` properties
+on affected engines, and an excessively long filename would waste quota.
+
+**Fix:** `safeStorageKey(filename)` hashes the filename using djb2 (fast, synchronous,
+no external dependencies) and prefixes it with `'wcr_page_'`. The key is always
+exactly 18 characters regardless of filename length or content.
+
+---
+
+### Change 8 — `fix(security): sanitise error messages before display`
+
+**File:** `assets/js/script.js`
+
+Raw exception messages from libarchive / JSZip / the FileReader could contain
+internal details (library version strings, Emscripten `Aborted()` messages,
+WASM runtime errors, file-system paths). These were previously passed directly
+to `showError()` and displayed to the user.
+
+**Fix:** `sanitiseErrorMessage()` allows a small allowlist of known safe
+application-level messages through unchanged, strips anything that looks like
+a stack trace, internal path, or WASM runtime message, and replaces unknown
+errors with a generic user-facing string.
+
+---
+
+### Change 9 — `fix(xss): replace innerHTML with DOM API in finaliseLoad()`
+
+**File:** `assets/js/script.js`
+
+`progressTextEl.innerHTML = '<span style="color:#4ade80">Completed!</span>'`
+was inconsistent with the project's stated `textContent`-only policy. Although
+the string is a hardcoded literal (not user-controlled), it sets a bad precedent.
+
+**Fix:** Replaced with `createElement` / `textContent` / `appendChild` — the
+same pattern used everywhere else in the codebase.
+
+---
+
 ## [2.2.3] — Toolbar/dock always visible; matches DHLKeyuser live site
 
 ### Commit 1 — `fix(dock): toolbar always visible as fixed bottom bar`
@@ -149,7 +296,6 @@ Stripped `-moz-border-radius`, `-webkit-transition`, `-moz-transition`,
 ### Commit 7 — `feat(reader): paged + webtoon/scroll dual reading modes`
 
 **Source:** DHLKeyuser/Web-Comic-Reader cursor branch
-**Files:** `index.html`, `assets/js/script.js`, `assets/css/styles.css`
 
 - **Paged mode:** `renderPagedImage(index)` — one full-width image in
   `#pagedContainer`. Click opens lightGallery.

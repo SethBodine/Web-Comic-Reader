@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 2.x     | ✅ Yes    |
+| 2.3.x   | ✅ Yes    |
+| 2.2.x   | ❌ No     |
 | 1.x     | ❌ No     |
 
 ## Reporting a Vulnerability
@@ -14,102 +15,119 @@ Response target: 48 hours for acknowledgement, 14 days for a fix or mitigation.
 
 ---
 
-## Security Hardening Applied in v2.0.0
+## Security Hardening History
 
-### 1. Cross-Site Scripting (XSS) — Fixed
+### v2.3.0 — Current
 
-**Original risk:** `script.js` used `innerHTML` to render user-supplied filenames
-into the DOM in multiple places, e.g.:
+#### 1. Subresource Integrity (SRI) — Added
 
-```js
-// BEFORE (vulnerable)
-item.innerHTML = `<div class="recent-comic-name">${filename}</div>`;
-```
+All CDN-loaded resources now carry `integrity="sha384-…"` hashes. The browser
+validates each resource's content against the pinned hash before execution.
+A compromised CDN or MITM cannot inject code.
 
-A maliciously crafted filename such as `<img src=x onerror=alert(1)>.cbz`
-stored in localStorage could execute arbitrary JavaScript on next load.
+CDN URLs changed from `.umd.min.js` → `.umd.js` to match exact filenames in the
+npm package (the `.umd.min.js` path was an ambiguous alias).
 
-**Fix:** All user-controlled strings are now written via `textContent` or
-explicit DOM API calls.  No user data is ever interpolated into HTML strings.
+#### 2. libunrar.js replaced with libarchive-wasm — Fixed
 
----
+**Previous risk:** `libunrar.js` was a ~2015 Emscripten asm.js build. It required
+`'unsafe-eval'` in the CSP, had no upstream maintenance, and did not support RAR5.
 
-### 2. localStorage Injection — Fixed
+**Fix:** Replaced with `libarchive-wasm@1.2.0` (MIT, actively maintained). The new
+library is a clean WASM module that:
+- Does not require `'unsafe-eval'`
+- Supports RAR v4, RAR v5, ZIP, TAR, 7z
+- Is 599 KB — smaller than libunrar.js (807 KB) + jszip.js (287 KB) combined
+- Is self-hosted (CDNs return 403 for WASM files)
 
-**Original risk:** The reading history object from `localStorage` was consumed
-without validation.  A rogue origin or XSS payload could poison `thumbnail`
-with a `javascript:` URI or an oversized data blob.
+#### 3. CSP tightened — Fixed
 
-**Fix:** `safeReadHistory()` validates every field:
-- `thumbnail` must match `/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/`
-- `last_page` is coerced to a safe non-negative integer
-- `timestamp` is coerced to a number
-- Any entry that fails validation is silently dropped
+- `'unsafe-eval'` removed from `script-src`
+- `'wasm-unsafe-eval'` added — strictly narrower; permits WASM compilation only
+- `blob:` added to `connect-src` — required for `WebAssembly.instantiateStreaming`
+- Both layers (meta CSP + `_headers`) kept in sync
 
----
+#### 4. localStorage key injection — Fixed
 
-### 3. Supply-Chain / Dependency Pinning — Fixed
+**Previous risk:** Page progress was saved as `'lastPage_' + filename`. A crafted
+filename (`__proto__`, excessively long strings) could cause prototype shadowing
+or quota exhaustion.
 
-**Original risk:** CDN imports used floating or unversioned URLs:
-```html
-<script src="https://unpkg.com/dropzone/dist/dropzone-min.js"></script>
-<link href="https://unpkg.com/dropzone/dist/dropzone.css">
-<script src="https://cdn.jsdelivr.net/npm/lightgallery.js@1.4.0/..."></script>
-```
-`unpkg.com/dropzone` with no version resolves to "latest", meaning a future
-breaking or malicious release would silently affect all users.
+**Fix:** `safeStorageKey(filename)` applies a djb2 hash, producing an 18-character
+fixed-length key (`wcr_page_xxxxxxxx`) regardless of filename content or length.
 
-**Fix:**
-- All CDN URLs now include explicit `@x.y.z` version pins
-- `crossorigin="anonymous"` added to all CDN resources (prerequisite for SRI)
-- A `_headers` file adds `Content-Security-Policy` at the Cloudflare edge
+#### 5. Error message information disclosure — Fixed
 
----
+**Previous risk:** Raw exception messages from archive libraries were displayed
+directly to the user, potentially leaking library versions, internal paths, or
+WASM runtime details.
 
-### 4. Outdated Libraries — Fixed
+**Fix:** `sanitiseErrorMessage()` passes a small allowlist of known safe
+application-level messages through and replaces all others with a generic
+user-facing string.
 
-| Library | Old version | New version | Reason |
-|---------|------------|-------------|--------|
-| lightgallery | 1.4.0 (2019, no patches) | 2.7.2 | Actively maintained; v1 had several reported XSS vectors in plugin callbacks |
-| jszip | 2.x (bundled) | 3.10.1 CDN | v3 validates ZIP entry names to prevent path-traversal |
-| dropzone | floating latest | 6.0.0 pinned | Eliminates floating-version supply-chain risk |
+#### 6. innerHTML inconsistency — Fixed
 
----
+`progressTextEl.innerHTML` in `finaliseLoad()` was a hardcoded literal (not
+exploitable), but inconsistent with the project's `textContent`-only policy.
+Replaced with `createElement` / `textContent` / `appendChild`.
 
-### 5. File Validation — Added
+#### 7. Cache-Control for index.html — Added
 
-**Original risk:** Any file dropped on the zone was passed directly to
-`archiveOpenFile()` with no extension or size check.
+`/index.html` now has `Cache-Control: no-cache, must-revalidate`. Previously,
+a stale cached `index.html` could load old asset URLs without the current
+`?v=` cache-buster.
 
-**Fix:** `validateFile()` enforces:
-- Extension must be one of `.cbr`, `.cbz`, `.cbt`
-- File size must be ≤ 1 GB
-- Files are checked _before_ any archive parsing begins
+#### 8. Custom 404 page — Added
 
----
+`/404.html` is now served for unmatched routes. Has its own minimal CSP.
 
-### 6. Content Security Policy — Added
+#### 9. Permissions-Policy expanded — Updated
 
-A strict CSP is applied at two layers:
-1. `<meta http-equiv="Content-Security-Policy">` in `index.html`
-2. `_headers` file served by Cloudflare Pages (takes precedence)
-
-The policy:
-- Restricts scripts to `'self'` and `cdn.jsdelivr.net`
-- Blocks `frame-ancestors` (clickjacking protection)
-- Restricts `base-uri` and `form-action` to `'self'`
+`screen-wake-lock=*` permits the app to call `navigator.wakeLock.request()`.
+`clipboard-read=()` and `clipboard-write=()` explicitly deny clipboard access.
 
 ---
 
-### 7. Blob URL Leaks — Fixed
+### v2.0.0
 
-**Original risk:** `URL.createObjectURL()` was called for every page image but
-`URL.revokeObjectURL()` was only called via `clearBlobs()` on the _next_ comic
-open.  For a 200-page comic this held ~200 live blob URLs in memory indefinitely.
+#### 1. Cross-Site Scripting (XSS) — Fixed
 
-**Fix:** Each image's blob URL is tracked in `activeBlobURLs` (a `Set`) and
-revoked in the image's `onload`/`onerror` handler, immediately freeing memory.
-`revokeAllBlobs()` is called as a safety net when opening a new comic.
+**Original risk:** `script.js` used `innerHTML` to render user-supplied filenames.
+
+**Fix:** All user-controlled strings written via `textContent` or explicit DOM API.
+
+#### 2. localStorage Injection — Fixed
+
+**Original risk:** Reading history consumed without validation; `thumbnail` could
+be a `javascript:` URI.
+
+**Fix:** `safeReadHistory()` validates every field with strict patterns.
+
+#### 3. Supply-Chain / Dependency Pinning — Fixed
+
+All CDN URLs now include explicit `@x.y.z` version pins.
+
+#### 4. Outdated Libraries — Fixed
+
+| Library | Old | New |
+|---------|-----|-----|
+| lightgallery | 1.4.0 | 2.7.2 |
+| jszip | 2.x | 3.10.1 (now removed; replaced by libarchive-wasm) |
+| dropzone | floating | 6.0.0 pinned |
+
+#### 5. File Validation — Added
+
+`validateFile()` enforces extension allowlist (`.cbr`, `.cbz`, `.cbt`) and 1 GB cap.
+
+#### 6. Content Security Policy — Added
+
+Strict CSP at two layers: meta tag and `_headers`.
+
+#### 7. Blob URL Leaks — Fixed
+
+`activeBlobURLs` Set tracks all `createObjectURL()` calls; `revokeAllBlobs()`
+on every `openComic()`.
 
 ---
 
@@ -117,19 +135,18 @@ revoked in the image's `onload`/`onerror` handler, immediately freeing memory.
 
 | Risk | Severity | Notes |
 |------|----------|-------|
-| `libunrar.js` is an old Emscripten build (~2015) | Medium | No known CVEs but not updated. RAR5 not supported. Evaluate `libarchive.wasm` as a replacement. |
-| `unsafe-eval` in CSP | Low | Required by Emscripten-compiled `libunrar.js`. Removing it would break RAR support. Replacing with a modern WASM build should allow `unsafe-eval` to be removed. |
-| `unsafe-inline` styles | Low | Required by Dropzone 6 which injects inline styles. |
-| localStorage size limits | Info | Thumbnails are stored as base64 JPEG. With many comics these can grow large. A quota guard is recommended. |
-| No integrity on local scripts | Info | `uncompress.js`, `libunrar.js`, `script.js` are served from the same origin, so SRI is not required but could be added as extra hardening via a build step. |
+| `unsafe-inline` styles | Low | Required by Dropzone 6 injected inline styles. Mitigated by `style-src` restricting to `'self'` + trusted CDN. |
+| No SRI on self-hosted scripts | Info | `uncompress.js`, `libarchive.js`, `script.js` are served from the same origin. SRI on same-origin scripts is not required by spec but could be added via a CI build step. |
+| libarchive-wasm single maintainer | Info | Active, MIT-licensed, well-structured. Monitor for upstream updates. |
+| localStorage page-progress quota | Info | Debounced at 300 ms. With many comics and many page turns, quota may grow. Consider adding a quota guard. |
 
 ---
 
 ## Recommended Future Improvements
 
-1. **Replace `libunrar.js`** with a maintained WASM port (e.g. `libarchive.wasm`) to
-   eliminate `unsafe-eval` from the CSP and gain RAR5 support.
-2. **Add SRI hashes** to local scripts via a CI build step (`scripts/generate-sri.js`).
-3. **Throttle localStorage writes** — currently every page-turn triggers a write.
-   Debounce with a 500ms delay to reduce I/O.
-4. **Service Worker** — cache the app shell for fully offline PWA experience.
+1. **SRI on self-hosted scripts** — generate hashes in CI and inject into `index.html`.
+2. **Service Worker** — cache the app shell for fully offline PWA experience.
+3. **Screen Wake Lock** — call `navigator.wakeLock.request('screen')` when a comic
+   opens (Permissions-Policy already allows it).
+4. **localStorage quota guard** — prune oldest `wcr_page_*` entries when
+   `localStorage.length` exceeds a threshold.
