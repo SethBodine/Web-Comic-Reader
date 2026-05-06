@@ -1,21 +1,46 @@
-MIT License
+/*
+  # Content-Security-Policy
+  # All JS, CSS and fonts are now self-hosted — cdn.jsdelivr.net removed entirely.
+  # 'wasm-unsafe-eval' — permits WebAssembly.compile/instantiate only (not JS eval).
+  # 'unsafe-inline' styles — still required by Dropzone 6 injected inline styles.
+  # connect-src blob: — required for WebAssembly.instantiateStreaming.
+  # frame-ancestors 'none' — blocks clickjacking; must live in headers, not meta CSP.
+  #
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  # Permissions-Policy: deny all sensors/APIs we don't use.
+  # screen-wake-lock=* allows the app to request wake lock (keep screen on while reading).
+  # Risk: minimal — the API requires explicit JS code to call navigator.wakeLock.request();
+  # the app does not currently use it, but this permits adding it without a header change.
+  # clipboard-read/write are denied; the app has no clipboard interaction.
+  Permissions-Policy: accelerometer=(), camera=(), clipboard-read=(), clipboard-write=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), screen-wake-lock=*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
 
-Copyright (c) 2017 Afif Zafri
+# HTML entry point — must revalidate so browsers pick up new asset cache-busters.
+/index.html
+  Cache-Control: no-cache, must-revalidate
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+# 404 page — same no-cache policy.
+/404.html
+  Cache-Control: no-cache, must-revalidate
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+# Serve the WASM binary with the correct MIME type so WebAssembly.instantiateStreaming
+# succeeds on first attempt. Without this, browsers fall back to the XHR path and
+# may emit multiple connect-src CSP events during retry.
+/assets/js/uncompress/libarchive.wasm
+  Content-Type: application/wasm
+  Cache-Control: public, max-age=31536000, immutable
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+/assets/*
+  Cache-Control: no-cache, must-revalidate
+
+/*.js
+  Cache-Control: no-cache, must-revalidate
+
+/*.css
+  Cache-Control: no-cache, must-revalidate
